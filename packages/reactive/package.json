@@ -1,0 +1,23 @@
+{
+  "name": "@pimas/reactive",
+  "version": "0.0.0",
+  "description": "Pimas fine-grained reactive core — signals, effects, memos. Zero dependencies, runs anywhere (browser or Node).",
+  "type": "module",
+  "license": "MIT",
+  "author": "Noah Hyden",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "src"],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json"
+  },
+  "keywords": ["reactive", "signals", "fine-grained", "headless"]
+}

@@ -7,6 +7,20 @@ Same engine class as [SolidJS](https://www.solidjs.com/): values are
 *observable*, and only the exact DOM nodes that read a changed value update.
 There is no diffing.
 
+## Packages
+
+A monorepo (npm workspaces) so you import only what you need. The dependency
+direction is one-way: renderer → core, never the reverse.
+
+| Package | What | Depends on |
+| --- | --- | --- |
+| [`@pimas/reactive`](packages/reactive) | reactive core — signals/effects/memos. Zero deps, headless (browser **or** Node). | — |
+| [`@pimas/dom`](packages/dom) | DOM renderer + JSX runtime *(Phase 2, stub)* | `@pimas/reactive` |
+
+The core is the irreducible kernel: anything reactive drags it in, but nothing
+else. Every package is pure ESM and `"sideEffects": false`, so a bundler strips
+unused exports.
+
 ## Status
 
 | Phase | Scope | State |
