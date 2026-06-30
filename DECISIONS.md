@@ -115,3 +115,58 @@ Tracks 1–2 exercise the renderer; 3–4 the headless core.
 ### 16. Privacy
 Stays a private repo until it can literally replace the Claude design framework.
 No open-sourcing / npm publish before then.
+
+---
+
+## Consolidation review — 2026-06-30
+
+Two background agents consolidated the facts: a comparison vs the modern reactive
+field, and an in-browser test-suite design. Outcomes:
+
+### 17. Validated against the field
+Comparison vs Solid, Svelte 5 runes, Vue Vapor, Qwik, Angular signals, React 19
+compiler, Leptos/Dioxus/Sycamore, Compose/SwiftUI/Flutter confirmed: the 3-color
+push-pull core is best-in-class (glitch-free, lazy memos, equality cutoff); the
+`RenderBackend` seam is idiomatic and correctly factored (`effect` as the run-once
+hinge mirrors Solid's universal renderer); the bundle floor (588 B gz signal /
+~1.75 KB dom) is far under peers (Solid ~7 KB, Preact-signals ~4 KB) — partly
+because scope is smaller; the per-import size guardrail is a discipline most
+frameworks lack; single-package subpaths is a good solo-owner call. Verdict:
+**"modern core, incomplete API surface."**
+
+### 18. Post-3b primitive backlog (build order)
+Confirmed gaps vs the field, sequenced cheap-owner-tree-wins-first, compiler-last
+(against a frozen API). None block Phase 4 (the static site needs none), so the
+site port goes first; this cluster is **pre-Klarum** (Klarum apps will need store
++ context):
+1. `createContext`/`useContext` — LOW cost, the owner tree is already the substrate. Highest-leverage cheap win.
+2. `<ErrorBoundary>`/`catchError` — LOW–MED; wrap update/component in try/catch, propagate up the owner tree.
+3. `createStore` (nested reactive proxy) — HIGHEST real-app value (an object in one signal re-runs everything on any field change); pure userland-of-the-kernel, no core change.
+4. `hydrate()` — seam-ready (the `<!---->` anchors are already emitted on both sides); needs a backend mode that *adopts* existing DOM instead of creating it.
+5. Scheduler seam — microtask flush + parent/child effect ordering; the precondition for any future concurrency/transitions. Current flush is synchronous (simple, debuggable, but no ordering guarantee and forecloses concurrency).
+6. Compiler (thunk-eraser) — Phase 5 anchor; erases the `{() => x()}` tax every comparable framework eventually compiled away. Sequence last, against a stable runtime API.
+
+### 19. OPEN — resumability vs direct `addEventListener`
+The comparison flagged a real tension between #13 (resumability goal) and #9
+(direct `addEventListener` + closure handlers). Qwik-style resumability needs
+**serializable, addressable handler identity** (a registry/QRL-like indirection
+at the backend `listen` seam) — the opposite of closures. **Not urgent:** there's
+no event-heavy code yet (the static site barely uses handlers), so retrofit cost
+is still low. Recommendation: introduce the handler-identity layer in the `listen`
+contract when we start klarum.com's interactive demos, not before — but track it
+so it's a deliberate decision, not a surprise. **Status: OPEN.**
+
+### 20. In-browser test suite — Vite dev server + WebBridge (design accepted)
+A real-browser suite to complement the happy-dom unit tests, for cases happy-dom
+can't reach (real SVG `getBBox`/namespace, focus surviving a keyed `<For>`
+reorder, event bubbling, CSS box-model, live `checked`/`value`). Chosen design:
+a tiny Vite dev server (+1 devDep, no browser binaries) reusing the existing
+`jsxImportSource`+alias config, serving a hand-rolled runner that publishes
+`window.__PIMAS_TEST_RESULTS__` (JSON for WebBridge `evaluate()`) + a rendered
+pass/fail list (for `screenshot()`). Rejected Vitest browser mode (Playwright
+binaries fight WebBridge for browser control). Not yet implemented.
+
+### 21. Interim thunk-staleness dev warning (low priority)
+Until the compiler (#18.6) erases the thunk convention, a dev-mode warning when a
+non-function but dynamic-looking value is set as a child/attr would catch the
+silent-staleness footgun. Recorded; not yet built.
