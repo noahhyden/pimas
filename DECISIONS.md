@@ -156,15 +156,30 @@ is still low. Recommendation: introduce the handler-identity layer in the `liste
 contract when we start klarum.com's interactive demos, not before — but track it
 so it's a deliberate decision, not a surprise. **Status: OPEN.**
 
-### 20. In-browser test suite — Vite dev server + WebBridge (design accepted)
+### 20. In-browser test suite — Vite dev server + WebBridge (BUILT)
 A real-browser suite to complement the happy-dom unit tests, for cases happy-dom
 can't reach (real SVG `getBBox`/namespace, focus surviving a keyed `<For>`
-reorder, event bubbling, CSS box-model, live `checked`/`value`). Chosen design:
-a tiny Vite dev server (+1 devDep, no browser binaries) reusing the existing
-`jsxImportSource`+alias config, serving a hand-rolled runner that publishes
+reorder, event bubbling, CSS box-model, live `checked`/`value`). Design as built:
+a tiny Vite dev server (`npm run test:browser`, +1 devDep `vite`, no browser
+binaries) reusing the existing `jsxImportSource`+alias config (`vite.config.ts`),
+serving `browser-test/` — a framework-free hand-rolled runner that publishes
 `window.__PIMAS_TEST_RESULTS__` (JSON for WebBridge `evaluate()`) + a rendered
 pass/fail list (for `screenshot()`). Rejected Vitest browser mode (Playwright
-binaries fight WebBridge for browser control). Not yet implemented.
+binaries fight WebBridge for browser control). `browser-test/**` is excluded from
+vitest. **9 fixtures, all green.** It earned its keep on the first run — see #22.
+
+### 22. Keyed-move uses `moveBefore()`, not `insertBefore` (correctness)
+The in-browser suite (#20) immediately caught what happy-dom hid: on a keyed
+`<For>` reorder the row node was correctly *reused* (identity + `.value`
+survived), but a focused input lost focus — plain `insertBefore` of a connected
+node detaches+reattaches it, which blurs it and resets selection/iframe/media
+state. The DOM backend's `insert` now uses the atomic `Element.moveBefore()` when
+the node is already a child of the target parent (a true move) and the platform
+supports it, falling back to `insertBefore` otherwise (happy-dom lacks it; the
+`try/catch` covers constraint violations). This is the natural completion of the
+identity-keying promise (#12): reusing the node should preserve *all* its state,
+not just its data. Correctness, not perf — so not deferred (#14). Cost: +34 B gz
+on the `dom` import (1756→1790, under the 1800 budget; no re-baseline).
 
 ### 21. Interim thunk-staleness dev warning (low priority)
 Until the compiler (#18.6) erases the thunk convention, a dev-mode warning when a

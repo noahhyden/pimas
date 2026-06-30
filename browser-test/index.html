@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pimas — browser tests</title>
+    <style>
+      body {
+        font: 14px/1.55 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+        margin: 2rem;
+        background: #0b0b0d;
+        color: #d7d7da;
+      }
+      h1 { font-size: 1.05rem; margin: 0 0 1rem; }
+      .pass { color: #4ade80; }
+      .fail { color: #f87171; }
+      ul { list-style: none; padding: 0; margin: 0; }
+      li { margin: 0.15rem 0; }
+      pre { color: #fca5a5; margin: 0.15rem 0 0.6rem 1.4rem; white-space: pre-wrap; }
+    </style>
+  </head>
+  <body>
+    <div id="out">running…</div>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

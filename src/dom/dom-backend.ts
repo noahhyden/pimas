@@ -36,7 +36,27 @@ export const domBackend: RenderBackend = {
     (node as Text).data = value;
   },
   insert(parent, node, before) {
-    (parent as Node).insertBefore(node as Node, (before as Node) ?? null);
+    const p = parent as Node;
+    const n = node as Node;
+    const ref = (before as Node) ?? null;
+    // Reordering an already-attached node (a keyed <For> move): use the atomic
+    // state-preserving move when the platform has it. Plain insertBefore
+    // detaches+reattaches the node, which blurs a focused element and resets
+    // selection/iframe/media state; moveBefore keeps all of it. Guarded by a
+    // feature check (happy-dom lacks it) + parentage check (true moves only),
+    // with insertBefore as the fallback.
+    if (
+      n.parentNode === p &&
+      typeof (p as Node & { moveBefore?: unknown }).moveBefore === "function"
+    ) {
+      try {
+        (p as Node & { moveBefore(n: Node, ref: Node | null): void }).moveBefore(n, ref);
+        return;
+      } catch {
+        /* constraints not met — fall through to insertBefore */
+      }
+    }
+    p.insertBefore(n, ref);
   },
   remove(parent, node) {
     if ((node as Node).parentNode === parent) (parent as Node).removeChild(node as Node);

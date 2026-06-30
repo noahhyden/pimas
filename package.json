@@ -39,13 +39,15 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "build": "tsc -p tsconfig.build.json",
-    "size": "node scripts/size.mjs"
+    "size": "node scripts/size.mjs",
+    "test:browser": "vite"
   },
   "keywords": ["reactive", "signals", "ui", "framework", "fine-grained"],
   "devDependencies": {
     "esbuild": "^0.24.2",
     "happy-dom": "^16.5.3",
     "typescript": "^5.7.2",
+    "vite": "^6.0.7",
     "vitest": "^3.0.5"
   }
 }

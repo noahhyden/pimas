@@ -1,11 +1,17 @@
-import { defineConfig } from "vitest/config";
+import { defineConfig } from "vite";
 import { resolve } from "node:path";
 
-// Resolve the public subpaths to source (dist isn't built during tests) and
-// wire the JSX automatic runtime to `pimas`. Order matters: subpaths first.
-const src = (p: string) => resolve(process.cwd(), "src", p);
+/**
+ * Dev server for the in-browser test suite (browser-test/). Reuses the same
+ * subpath→source aliases and JSX automatic-runtime wiring as vitest, so the
+ * fixtures import `pimas`, `pimas/dom`, `pimas/flow` exactly like real consumers
+ * do — measured straight from source, no build step. Order matters: subpaths
+ * before the bare `pimas`.
+ */
+const src = (p: string) => resolve(import.meta.dirname, "src", p);
 
 export default defineConfig({
+  root: "browser-test",
   resolve: {
     alias: [
       { find: "pimas/jsx-dev-runtime", replacement: src("dom/jsx-dev-runtime.ts") },
@@ -20,9 +26,5 @@ export default defineConfig({
     jsx: "automatic",
     jsxImportSource: "pimas",
   },
-  test: {
-    environment: "happy-dom",
-    // browser-test/ runs in a REAL browser via Vite + WebBridge, not vitest.
-    exclude: ["**/node_modules/**", "**/dist/**", "browser-test/**"],
-  },
+  server: { port: 5183 },
 });
