@@ -185,3 +185,49 @@ on the `dom` import (1756→1790, under the 1800 budget; no re-baseline).
 Until the compiler (#18.6) erases the thunk convention, a dev-mode warning when a
 non-function but dynamic-looking value is set as a child/attr would catch the
 silent-staleness footgun. Recorded; not yet built.
+
+---
+
+## Phase 4 — porting noahhyden.com (in progress, 2026-06-30)
+
+Research agent (clean-room, SSG/prerender field survey) ran in parallel; its
+recommendations are adopted below. Site source lives in the noahhyden.com repo
+under `site/` (consumes the real `pimas` package, not source — honest dogfood of
+the exports map). Home page ported, prerendered, and real-browser verified;
+remaining pages + deployment pending.
+
+### 23. Static prerender via a plain esbuild script — no Vite, no meta-framework
+For a handful of pages the smallest honest pipeline wins (research verdict): one
+~110-line `site/build.mjs` — esbuild compiles each `.tsx` (`jsxImportSource:
+pimas`), Node imports it, `pimas/server` `renderToString` → one `index.html` per
+route, `<head>` from a per-page `meta` export, sitemap/robots/.nojekyll/CNAME
+emitted. Adopting Vite would mean fighting a plugin model to inject a non-React
+jsxImportSource for zero benefit at this scale. The backend seam (#6) paid off
+exactly as predicted: the SAME page components render to HTML with no rewrite.
+
+### 24. Zero JavaScript shipped (delete the runtime, don't hydrate)
+The site ships **0 KB JS** — no hydration, no islands. Research confirmed this is
+the right default for a content site; the azulejo is static SVG, and the few
+interactive bits (if any) will be ~15 lines of vanilla JS, not a framework.
+Resumability (#13) is correctly deferred here (nothing to resume on a static
+page); the only forward-compatible seam reserved is optional flag-gated stable
+instance IDs in the string renderer — NOT built yet, not needed for this site.
+
+### 25. Honest, build-measured footer metrics (the anti-bloat incentive)
+The footer reports only defensible numbers, injected at build via sentinel tokens:
+JS shipped (0), gzipped HTML weight, prerender time, pimas version, and the
+*structural* "no diff pass → no wasted re-renders" claim. Browser RAM is omitted
+(theater, per research). External requests are reported **honestly** — fonts are
+the one external origin (Google Fonts), and the footer says so rather than claim a
+false zero; self-hosting is the planned follow-up to make it a true 0.
+
+### 26. Dual-kernel hazard, confirmed in the wild — `pimas` stays external in builds
+The prerender first rendered with the DOM backend active under SSR (it crashed on
+`document`). Cause: `esbuild bundle:true` had inlined a SECOND copy of the engine
+into the page, so the page's `h()` read a different `currentBackend` global than
+the `renderToString` copy set. This is exactly the dual-kernel failure #4 warned
+about — observed live. Fix: mark `pimas`/`pimas/*` **external** in the page build
+so both resolve to the one installed package → one kernel instance. The lesson
+generalizes: any consumer that both authors components AND drives a renderer must
+guarantee a single engine instance. (Also: never evaluate JSX at module top level
+— it runs `h()` before any `renderWith` sets the backend; make icons components.)
