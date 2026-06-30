@@ -221,3 +221,74 @@ describe("createRoot", () => {
     expect(inner).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("push-pull guarantees", () => {
+  it("is glitch-free in a diamond: D recomputes once, never stale", () => {
+    const [a, setA] = createSignal(1);
+    let dRuns = 0;
+    const seen: number[] = [];
+    createRoot(() => {
+      const b = createMemo(() => a() + 1);
+      const c = createMemo(() => a() + 1);
+      const d = createMemo(() => {
+        dRuns++;
+        return b() + c();
+      });
+      createEffect(() => seen.push(d()));
+    });
+    expect(seen).toEqual([4]); // (1+1)+(1+1)
+    expect(dRuns).toBe(1);
+
+    setA(2);
+    expect(seen).toEqual([4, 6]); // (2+1)+(2+1) — emitted once, never the glitched value
+    expect(dRuns).toBe(2); // exactly one recompute, not two
+  });
+
+  it("memos are lazy — never computed until read", () => {
+    const [a, setA] = createSignal(0);
+    let runs = 0;
+    createRoot(() => {
+      createMemo(() => {
+        runs++;
+        return a();
+      });
+    });
+    expect(runs).toBe(0); // created but never read
+    setA(1);
+    expect(runs).toBe(0); // still unread → still not computed
+  });
+
+  it("equality short-circuit stops downstream recompute", () => {
+    const [a, setA] = createSignal(2);
+    let effRuns = 0;
+    createRoot(() => {
+      const parity = createMemo(() => a() % 2);
+      createEffect(() => {
+        parity();
+        effRuns++;
+      });
+    });
+    expect(effRuns).toBe(1);
+
+    setA(4); // 4 % 2 === 0, same as before → memo recomputes, value unchanged → effect NOT re-run
+    expect(effRuns).toBe(1);
+
+    setA(3); // 3 % 2 === 1, changed → effect re-runs
+    expect(effRuns).toBe(2);
+  });
+
+  it("a write inside an effect cascades correctly", () => {
+    const [a, setA] = createSignal(0);
+    const [b, setB] = createSignal(0);
+    const seen: number[] = [];
+    createRoot(() => {
+      createEffect(() => {
+        if (a() === 1) setB(10); // write during flush
+      });
+      createEffect(() => seen.push(b()));
+    });
+    expect(seen).toEqual([0]);
+    setA(1);
+    expect(seen).toEqual([0, 10]); // the b-effect picked up the cascaded write
+  });
+});

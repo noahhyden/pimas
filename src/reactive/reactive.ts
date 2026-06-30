@@ -1,200 +1,237 @@
 /**
- * Pimas — reactive core
- * ----------------------
- * Fine-grained reactivity in ~200 lines. No virtual DOM, no diffing.
+ * Pimas — reactive core (push-pull, glitch-free).
+ * ------------------------------------------------
+ * Fine-grained reactivity. Reading a signal subscribes the running computation;
+ * writing it re-runs only the computations that depend on it. But propagation is
+ * NOT eager — it's a two-phase push-pull, which makes it glitch-free:
  *
- * The whole system rests on one idea: a single global pointer to "the
- * computation currently running". When you READ a signal, it records that
- * running computation as a subscriber. When you WRITE a signal, it re-runs
- * every computation that read it. Because reads are tracked individually,
- * a change only re-runs the exact computations that depend on it — that is
- * what "fine-grained" means.
+ *   PUSH (on write): mark dependents without computing anything. Direct
+ *     dependents become DIRTY ("a source definitely changed"); everything
+ *     transitively below becomes CHECK ("a source *might* have changed").
+ *   PULL (on read / effect flush): `updateIfNecessary` walks a CHECK node's
+ *     sources first; it recomputes only if a source actually changed value.
  *
- * Built on top of this file:
- *   - createSignal : a reactive value            (read/write)
- *   - createEffect : a side effect that re-runs   (the subscriber)
- *   - createMemo   : a derived, cached value       (effect + signal)
- *   - batch        : coalesce many writes into one flush
- *   - untrack      : read without subscribing
- *   - createRoot   : an ownership scope you can dispose
- *   - onCleanup    : run teardown before a re-run / on disposal
+ * In a diamond (D = B + C, B = C = A+1), writing A recomputes D exactly once,
+ * after both B and C are current — no transient wrong value, no double-run. An
+ * equality short-circuit (a recompute that yields the same value stops there)
+ * kills cascades. Memos are LAZY (compute on read); effects are EAGER (the roots
+ * that drive the pull). Algorithm after Milo Hansen's "Reactively".
  */
 
-// ── Module-global state ──────────────────────────────────────────────────
+// ── Node model ───────────────────────────────────────────────────────────
 
-/**
- * The computation currently executing. While an effect/memo runs, this points
- * at it so signal reads can wire up the dependency. `null` outside any
- * computation (or inside `untrack`).
- */
-let currentObserver: Computation | null = null;
+type State = 0 | 1 | 2;
+const CLEAN: State = 0;
+const CHECK: State = 1;
+const DIRTY: State = 2;
 
-/**
- * The current ownership scope. A computation created while another is running
- * (or inside a `createRoot`) is "owned" by it, so disposing the parent
- * disposes the children. This is what stops nested effects from leaking.
- */
-let currentOwner: Owner | null = null;
-
-/**
- * Batching depth. While > 0, signal writes queue their subscribers into
- * `pending` instead of running them immediately; the outermost `batch` runs
- * them once on exit. A burst of N writes then triggers one flush, not N.
- */
-let batchDepth = 0;
-const pending = new Set<Computation>();
-
-// ── Types ────────────────────────────────────────────────────────────────
-
-export type Accessor<T> = () => T;
-export type Setter<T> = (value: T | ((prev: T) => T)) => T;
-export type Signal<T> = [get: Accessor<T>, set: Setter<T>];
-
-/** A scope that owns child computations and teardown callbacks. */
-export interface Owner {
-  owned: Computation[];
+interface Reactive<T = any> {
+  value: T | undefined;
+  /** Present for memos & effects; absent for plain signals. */
+  fn?: () => T;
+  state: State;
+  /** Effects are eager roots that must run when dirty even if unread. */
+  effect: boolean;
+  disposed: boolean;
+  /** Nodes this one read last run (its dependencies). */
+  sources: Set<Reactive>;
+  /** Nodes that read this one (its dependents). */
+  observers: Set<Reactive>;
+  owner: Reactive | null;
+  owned: Reactive[];
   cleanups: Array<() => void>;
+  equals: (a: T, b: T) => boolean;
 }
 
-interface Computation extends Owner {
-  /** Re-run this computation: tear down, then evaluate while tracked. */
-  execute: () => void;
-  /**
-   * Every signal subscriber-set this computation currently belongs to. We keep
-   * back-references so that before each re-run we can remove ourselves from
-   * the signals we read last time — otherwise stale dependencies pile up and a
-   * computation keeps re-running for values it no longer reads.
-   */
-  sources: Set<Set<Computation>>;
+// ── Globals ──────────────────────────────────────────────────────────────
+
+/** The computation currently running, so reads can wire up dependencies. */
+let currentObserver: Reactive | null = null;
+/** The current ownership scope (for disposal of nested computations). */
+let currentOwner: Reactive | null = null;
+/** While > 0, writes mark + queue effects but don't flush until the outer exit. */
+let batchDepth = 0;
+/** Effects marked dirty/check, awaiting a flush. */
+const effectQueue: Reactive[] = [];
+let flushing = false;
+
+const defaultEquals = <T>(a: T, b: T) => Object.is(a, b);
+
+function makeNode<T>(fn: (() => T) | undefined, value: T | undefined, effect: boolean): Reactive<T> {
+  return {
+    value,
+    fn,
+    state: fn ? DIRTY : CLEAN, // computeds start dirty (need first compute); signals clean
+    effect,
+    disposed: false,
+    sources: new Set(),
+    observers: new Set(),
+    owner: currentOwner,
+    owned: [],
+    cleanups: [],
+    equals: defaultEquals,
+  };
+}
+
+// ── Read / write ───────────────────────────────────────────────────────────
+
+function readNode<T>(node: Reactive<T>): T {
+  // Subscribe the running computation (two-way link).
+  if (currentObserver) {
+    currentObserver.sources.add(node);
+    node.observers.add(currentObserver);
+  }
+  // A memo must be current before its value is trusted (effects pull via flush).
+  if (node.fn && !node.effect) updateIfNecessary(node);
+  return node.value as T;
+}
+
+function writeNode<T>(node: Reactive<T>, next: T): T {
+  if (node.equals(node.value as T, next)) return node.value as T; // no-op on equal
+  node.value = next;
+  // PUSH: mark direct dependents DIRTY (transitive ones become CHECK).
+  for (const o of node.observers) stale(o, DIRTY);
+  if (batchDepth === 0) flushEffects();
+  return next;
+}
+
+/** Propagate a "you may be out of date" mark down the graph. No computation. */
+function stale(node: Reactive, level: State): void {
+  if (node.state < level) {
+    // An effect transitioning off CLEAN must be queued to run.
+    if (node.state === CLEAN && node.effect) effectQueue.push(node);
+    node.state = level;
+    for (const o of node.observers) stale(o, CHECK);
+  }
+}
+
+// ── Pull / recompute ─────────────────────────────────────────────────────
+
+/** Bring a node up to date, recomputing only if a source truly changed. */
+function updateIfNecessary(node: Reactive): void {
+  if (node.state === CLEAN) return;
+  // CHECK: a source *might* have changed — resolve sources first (walk up).
+  if (node.state === CHECK) {
+    for (const source of node.sources) {
+      if (source.fn) updateIfNecessary(source);
+      if ((node.state as State) === DIRTY) break; // a source recompute dirtied us
+    }
+  }
+  if (node.state === DIRTY) update(node);
+  node.state = CLEAN;
+}
+
+/** Recompute a node; propagate to observers ONLY if the value actually changed. */
+function update<T>(node: Reactive<T>): void {
+  cleanup(node); // dispose owned children + run cleanups before re-running
+  removeSources(node);
+
+  const prevObserver = currentObserver;
+  const prevOwner = currentOwner;
+  currentObserver = node;
+  currentOwner = node;
+  try {
+    const next = node.fn!();
+    if (!node.equals(node.value as T, next)) {
+      node.value = next;
+      for (const o of node.observers) o.state = DIRTY; // real change → dependents dirty
+    }
+  } finally {
+    currentObserver = prevObserver;
+    currentOwner = prevOwner;
+  }
+}
+
+function flushEffects(): void {
+  if (flushing) return; // a write inside an effect just enqueues; the loop picks it up
+  flushing = true;
+  try {
+    for (let i = 0; i < effectQueue.length; i++) {
+      const e = effectQueue[i]!;
+      if (!e.disposed && e.state !== CLEAN) updateIfNecessary(e);
+    }
+    effectQueue.length = 0;
+  } finally {
+    flushing = false;
+  }
 }
 
 // ── Teardown ───────────────────────────────────────────────────────────────
 
-/** Dispose owned children (depth-first) and run cleanup callbacks. */
-function cleanupNode(node: Owner): void {
-  for (const child of node.owned) disposeComputation(child);
+function removeSources(node: Reactive): void {
+  for (const s of node.sources) s.observers.delete(node);
+  node.sources.clear();
+}
+
+function cleanup(node: Reactive): void {
+  for (const child of node.owned) dispose(child);
   node.owned.length = 0;
-  // Run user cleanups in reverse registration order (like nested scopes).
   for (let i = node.cleanups.length - 1; i >= 0; i--) node.cleanups[i]!();
   node.cleanups.length = 0;
 }
 
-/** Fully tear down a computation: children, cleanups, and signal links. */
-function disposeComputation(c: Computation): void {
-  cleanupNode(c);
-  for (const subscribers of c.sources) subscribers.delete(c);
-  c.sources.clear();
+function dispose(node: Reactive): void {
+  node.disposed = true;
+  cleanup(node);
+  removeSources(node);
 }
 
-// ── Primitives ───────────────────────────────────────────────────────────
+// ── Public API ─────────────────────────────────────────────────────────────
+
+export type Accessor<T> = () => T;
+export type Setter<T> = (value: T | ((prev: T) => T)) => T;
+export type Signal<T> = [get: Accessor<T>, set: Setter<T>];
+export interface Owner {
+  owned: Reactive[];
+  cleanups: Array<() => void>;
+}
 
 /**
- * A reactive value. Returns `[read, write]`.
- *   const [count, setCount] = createSignal(0)
- *   count()        // read  — subscribes the running computation
- *   setCount(1)    // write — re-runs subscribers
- *   setCount(n => n + 1)  // functional update
+ * A reactive value. `count()` reads (and subscribes); `setCount(v)` writes.
+ * Functional updates supported: `setCount(n => n + 1)`.
  */
 export function createSignal<T>(initial: T): Signal<T> {
-  const subscribers = new Set<Computation>();
-  let value = initial;
-
-  const read: Accessor<T> = () => {
-    if (currentObserver) {
-      // Two-way link: signal knows its subscriber, subscriber knows its source.
-      subscribers.add(currentObserver);
-      currentObserver.sources.add(subscribers);
-    }
-    return value;
-  };
-
-  const write: Setter<T> = (next) => {
-    const newValue =
-      typeof next === "function" ? (next as (p: T) => T)(value) : next;
-
-    // Skip the whole notification if nothing actually changed.
-    if (Object.is(newValue, value)) return value;
-    value = newValue;
-
-    // Snapshot first: a subscriber re-running will re-subscribe and mutate
-    // this set, which would corrupt a live iteration.
-    for (const sub of [...subscribers]) {
-      if (batchDepth > 0) pending.add(sub);
-      else sub.execute();
-    }
-    return value;
-  };
-
+  const node = makeNode<T>(undefined, initial, false);
+  const read: Accessor<T> = () => readNode(node);
+  const write: Setter<T> = (next) =>
+    writeNode(node, typeof next === "function" ? (next as (p: T) => T)(node.value as T) : next);
   return [read, write];
 }
 
 /**
- * Run `fn` now, and again whenever any signal it read changes. Dependencies
- * are re-collected on every run, so conditional branches subscribe only to
- * the signals actually touched this time.
- */
-export function createEffect(fn: () => void): void {
-  const computation: Computation = {
-    execute() {
-      // Clear last run's deps + child scopes before re-tracking.
-      disposeComputation(computation);
-      const prevObserver = currentObserver;
-      const prevOwner = currentOwner;
-      currentObserver = computation;
-      currentOwner = computation;
-      try {
-        fn();
-      } finally {
-        currentObserver = prevObserver;
-        currentOwner = prevOwner;
-      }
-    },
-    sources: new Set(),
-    owned: [],
-    cleanups: [],
-  };
-
-  // Attach to the enclosing scope so it can be disposed with its parent.
-  if (currentOwner) currentOwner.owned.push(computation);
-  computation.execute();
-}
-
-/**
- * A derived value that recomputes when its dependencies change and caches the
- * result. Reading the memo subscribes you to it like any other signal.
- *
- * Note (v1): this is the eager implementation — the memo recomputes as soon as
- * a dependency changes, not lazily on read. Simple and correct; a lazy/pull
- * memo (which also fixes "diamond" glitches) is a Phase 5 optimization.
+ * A cached derived value. LAZY — it computes on first read and recomputes only
+ * when a dependency truly changes. Reading it subscribes you like any signal.
  */
 export function createMemo<T>(fn: () => T): Accessor<T> {
-  const [get, set] = createSignal<T>(undefined as T);
-  createEffect(() => set(fn()));
-  return get;
+  const node = makeNode<T>(fn, undefined, false);
+  if (currentOwner) currentOwner.owned.push(node);
+  return () => readNode(node);
 }
 
 /**
- * Group multiple writes so subscribers run once, after `fn` returns, instead
- * of after each write. Nested batches join the outermost one.
+ * Run `fn` now, and again whenever a signal it read changes. Effects are eager:
+ * they're the roots that drive the pull. Dependencies are re-collected each run,
+ * so conditional branches subscribe only to what they actually read.
  */
+export function createEffect(fn: () => void): void {
+  const node = makeNode<void>(fn, undefined, true);
+  if (currentOwner) currentOwner.owned.push(node);
+  updateIfNecessary(node); // initial run (DIRTY → update)
+}
+
+/** Group writes so dependent effects run once, after `fn` returns. */
 export function batch<T>(fn: () => T): T {
-  if (batchDepth > 0) return fn(); // already inside a batch
+  if (batchDepth > 0) return fn();
   batchDepth++;
   try {
     return fn();
   } finally {
     batchDepth--;
-    const toRun = [...pending];
-    pending.clear();
-    for (const c of toRun) c.execute();
+    flushEffects();
   }
 }
 
-/**
- * Read signals inside `fn` WITHOUT subscribing the current computation to
- * them. Useful when you want a value but don't want changes to it to re-run
- * you.
- */
+/** Read signals inside `fn` without subscribing the current computation. */
 export function untrack<T>(fn: () => T): T {
   const prev = currentObserver;
   currentObserver = null;
@@ -205,35 +242,21 @@ export function untrack<T>(fn: () => T): T {
   }
 }
 
-/**
- * Register a teardown callback for the current scope. It runs right before the
- * owning computation re-executes, and when the scope is disposed. Use it to
- * clean up timers, listeners, subscriptions, etc.
- */
+/** Register teardown for the current scope: runs before re-run and on disposal. */
 export function onCleanup(fn: () => void): void {
   if (currentOwner) currentOwner.cleanups.push(fn);
 }
 
 /**
- * Create a top-level reactive scope that does NOT auto-dispose. Everything
- * created inside is owned by it; call the provided `dispose` to tear it all
- * down at once. This is the root you mount an app under.
- *
- *   const dispose = createRoot(dispose => { ...build UI...; return dispose })
- *   // later: dispose()
+ * A top-level scope that doesn't auto-dispose. Everything created inside is
+ * owned by it; call the provided `dispose` to tear it all down at once.
  */
 export function createRoot<T>(fn: (dispose: () => void) => T): T {
-  const owner: Computation = {
-    execute() {}, // a root never re-runs; it only owns
-    sources: new Set(),
-    owned: [],
-    cleanups: [],
-  };
+  const owner = makeNode<void>(undefined, undefined, false);
   const prevOwner = currentOwner;
   currentOwner = owner;
-  const dispose = () => disposeComputation(owner);
   try {
-    return fn(dispose);
+    return fn(() => dispose(owner));
   } finally {
     currentOwner = prevOwner;
   }

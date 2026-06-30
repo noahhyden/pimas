@@ -65,7 +65,7 @@ render(() => <Counter />, document.body); // only the text node updates on click
 
 | Phase | Scope | State |
 | --- | --- | --- |
-| **1 — Reactive core** | `signal`/`effect`/`memo`/`batch`/`untrack`/`onCleanup`/`createRoot` | ✅ done |
+| **1 — Reactive core** | `signal`/`effect`/`memo`/`batch`/`untrack`/`onCleanup`/`createRoot` — glitch-free push-pull (3-color), lazy memos | ✅ done |
 | **2 — DOM renderer + JSX** | `h`/`Fragment`/`render`, dynamic attrs & children via effects, automatic JSX runtime | ✅ done |
 | **3 — Backend seam + SVG** | renderer over a `RenderBackend` contract, SVG `createElementNS`, `pimas/server` `renderToString` | ✅ done |
 | 3b — Control flow | `<Show>`/`<Switch>`, keyed `<For>`/`<Index>`, per-row owner scopes | next |

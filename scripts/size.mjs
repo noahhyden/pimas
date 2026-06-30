@@ -25,13 +25,16 @@ const alias = {
 };
 
 // name -> [fixture code, gzip byte budget | null]
+// Re-baselined in Phase 3a: the eager core was replaced by a glitch-free
+// push-pull (3-color) reactive core — more machinery, but correctness, not
+// bloat. Even a bare signal drags the propagation code it references (the
+// kernel is indivisible). Deliberate bumps, not silent: signal 192→588,
+// dom 1505→1673 gz.
 const fixtures = {
-  "core: signal only": [`import { createSignal } from "pimas"; createSignal(0);`, 800],
-  "core: full surface": [`import * as R from "pimas"; globalThis.x = R;`, 1500],
-  // Re-baselined 1200→1600 in Phase 3: the backend-contract seam (makes SSR
-  // additive) + the SVG tag-set for createElementNS. Deliberate, not silent.
-  "dom: render + h": [`import { render, h } from "pimas/dom"; globalThis.x = [render, h];`, 1600],
-  "server: renderToString": [`import { renderToString } from "pimas/server"; globalThis.x = renderToString;`, 1300],
+  "core: signal only": [`import { createSignal } from "pimas"; createSignal(0);`, 700],
+  "core: full surface": [`import * as R from "pimas"; globalThis.x = R;`, 1000],
+  "dom: render + h": [`import { render, h } from "pimas/dom"; globalThis.x = [render, h];`, 1800],
+  "server: renderToString": [`import { renderToString } from "pimas/server"; globalThis.x = renderToString;`, 1350],
 };
 
 let failed = false;
