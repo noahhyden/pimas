@@ -74,6 +74,9 @@ export const stringBackend: RenderBackend = {
   listen() {
     // no-op: a server render can't bind events.
   },
+  nextSibling() {
+    return null; // SSR runs once; reconcile never takes the move path
+  },
   effect(run) {
     untrack(run); // run once, no subscription
   },

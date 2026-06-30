@@ -37,6 +37,7 @@ const fixtures = {
   "dom: render + h": [`import { render, h } from "pimas/dom"; globalThis.x = [render, h];`, 1800],
   "server: renderToString": [`import { renderToString } from "pimas/server"; globalThis.x = renderToString;`, 1350],
   "flow: Show + Switch": [`import { Show, Switch, Match } from "pimas/flow"; globalThis.x = [Show, Switch, Match];`, 900],
+  "flow: For (keyed)": [`import { For } from "pimas/flow"; globalThis.x = For;`, 1100],
 };
 
 let failed = false;

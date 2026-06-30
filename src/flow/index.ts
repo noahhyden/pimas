@@ -14,11 +14,23 @@
  * Convention: pass branch children as a THUNK — `<Show when={x}>{() => <Heavy/>}</Show>`
  * — so the subtree is built lazily (only while shown) and disposed when hidden.
  */
-import { createMemo, type Accessor } from "../reactive/index.js";
+import {
+  createMemo,
+  createSignal,
+  createRoot,
+  onCleanup,
+  untrack,
+  type Accessor,
+} from "../reactive/index.js";
 import type { Child } from "../dom/engine.js";
 
 type Maybe<T> = T | (() => T);
 const evalMaybe = <T>(v: Maybe<T>): T => (typeof v === "function" ? (v as () => T)() : v);
+const toAccessor = <T>(v: T | Accessor<T>): Accessor<T> =>
+  typeof v === "function" ? (v as Accessor<T>) : () => v;
+const disposeAll = (ds: Array<() => void>): void => {
+  for (const d of ds) d();
+};
 
 /**
  * Render `children` while `when` is truthy, else `fallback`. The branch is built
@@ -72,4 +84,235 @@ export function Switch(props: {
     const m = selected();
     return m ? evalMaybe(m.children as Maybe<Child>) : evalMaybe(props.fallback as Maybe<Child>);
   });
+}
+
+// ── Keyed list reconciliation ────────────────────────────────────────────
+
+/**
+ * Map a reactive array to rows keyed by ITEM IDENTITY (`===` / SameValueZero).
+ * A surviving item's row — its DOM and reactive scope — is reused across updates;
+ * the body runs once per row and never re-runs on reorder. If the body reads its
+ * index, only that row's index signal is written when it moves. Removed rows are
+ * disposed (their `onCleanup`s fire). Returns the reconciler; `<For>` wraps it in
+ * a memo. (After Solid's `mapArray`.)
+ */
+function mapArray<T, U>(
+  list: Accessor<readonly T[]>,
+  mapFn: (item: T, index: Accessor<number>) => U,
+  fallback?: () => U,
+): () => U[] {
+  let items: T[] = [];
+  let mapped: U[] = [];
+  let disposers: Array<() => void> = [];
+  let len = 0;
+  // Only allocate index signals if the body actually reads its index.
+  let indexes: Array<(i: number) => void> | null = mapFn.length > 1 ? [] : null;
+  let usingFallback = false;
+
+  onCleanup(() => disposeAll(disposers));
+
+  function makeRow(j: number, item: T): U {
+    return createRoot((d) => {
+      disposers[j] = d;
+      if (indexes) {
+        const [index, setIndex] = createSignal(j);
+        indexes[j] = setIndex;
+        return mapFn(item, index);
+      }
+      return mapFn(item, () => j);
+    });
+  }
+
+  return () => {
+    const newItems = (list() || []) as T[];
+    const newLen = newItems.length;
+    return untrack(() => {
+      // FAST: clear (→ optional fallback)
+      if (newLen === 0) {
+        if (len !== 0) {
+          disposeAll(disposers);
+          disposers = [];
+          items = [];
+          mapped = [];
+          len = 0;
+          if (indexes) indexes = [];
+        }
+        if (fallback && !usingFallback) {
+          usingFallback = true;
+          mapped = [createRoot((d) => ((disposers[0] = d), fallback()))];
+        }
+        return mapped;
+      }
+      if (usingFallback) {
+        disposeAll(disposers);
+        disposers = [];
+        mapped = [];
+        usingFallback = false;
+      }
+
+      // FAST: initial create
+      if (len === 0) {
+        mapped = new Array(newLen);
+        for (let j = 0; j < newLen; j++) {
+          items[j] = newItems[j]!;
+          mapped[j] = makeRow(j, newItems[j]!);
+        }
+        len = newLen;
+        return mapped.slice();
+      }
+
+      // General diff: trim common prefix/suffix, then a backward key-map for the
+      // middle. Survivors are staged into `temp` at their new index; missing rows
+      // are disposed; genuinely new items are created.
+      const temp: U[] = new Array(newLen);
+      const tempDisposers: Array<() => void> = new Array(newLen);
+      const tempIndexes: Array<(i: number) => void> | null = indexes ? new Array(newLen) : null;
+
+      let start = 0;
+      let end = Math.min(len, newLen);
+      while (start < end && items[start] === newItems[start]) start++;
+
+      end = len - 1;
+      let newEnd = newLen - 1;
+      while (end >= start && newEnd >= start && items[end] === newItems[newEnd]) {
+        temp[newEnd] = mapped[end]!;
+        tempDisposers[newEnd] = disposers[end]!;
+        if (indexes && tempIndexes) tempIndexes[newEnd] = indexes[end]!;
+        end--;
+        newEnd--;
+      }
+
+      // Map each unresolved new item → its smallest index, chaining duplicates.
+      const newIndices = new Map<T, number>();
+      const newIndicesNext: number[] = new Array(newEnd + 1);
+      for (let j = newEnd; j >= start; j--) {
+        const item = newItems[j]!;
+        const i = newIndices.get(item);
+        newIndicesNext[j] = i === undefined ? -1 : i;
+        newIndices.set(item, j);
+      }
+
+      // Walk the old middle: reuse where the item is still wanted, else dispose.
+      for (let i = start; i <= end; i++) {
+        const item = items[i]!;
+        const j = newIndices.get(item);
+        if (j !== undefined && j !== -1) {
+          temp[j] = mapped[i]!;
+          tempDisposers[j] = disposers[i]!;
+          if (indexes && tempIndexes) tempIndexes[j] = indexes[i]!;
+          newIndices.set(item, newIndicesNext[j]!);
+        } else {
+          disposers[i]!();
+        }
+      }
+
+      // Materialize the new array: reuse staged rows (updating index), else create.
+      for (let j = start; j < newLen; j++) {
+        if (j in temp) {
+          mapped[j] = temp[j]!;
+          disposers[j] = tempDisposers[j]!;
+          if (indexes && tempIndexes) {
+            indexes[j] = tempIndexes[j]!;
+            indexes[j]!(j);
+          }
+        } else {
+          mapped[j] = makeRow(j, newItems[j]!);
+        }
+      }
+
+      mapped = mapped.slice(0, newLen);
+      disposers.length = newLen;
+      if (indexes) indexes.length = newLen;
+      len = newLen;
+      items = newItems.slice();
+      return mapped.slice();
+    });
+  };
+}
+
+/**
+ * Render a reactive list, keyed by item identity. Reorders move DOM rows (and
+ * their state) rather than rebuilding them.
+ *
+ *   <For each={items}>{(item, i) => <li>{() => i() + ": " + item.name}</li>}</For>
+ */
+export function For<T>(props: {
+  each: readonly T[] | Accessor<readonly T[]>;
+  fallback?: Child;
+  children: (item: T, index: Accessor<number>) => Child;
+}): Accessor<Child> {
+  const list = toAccessor(props.each) as Accessor<readonly T[]>;
+  const fallback = props.fallback != null ? () => props.fallback as Child : undefined;
+  return createMemo(mapArray<T, Child>(list, props.children, fallback)) as Accessor<Child>;
+}
+
+/**
+ * Map a reactive array to rows keyed by POSITION. The DOM at each slot stays put;
+ * when the value at a position changes, only that slot's value signal updates. No
+ * moves. Use for primitives or fixed-position state. (After Solid's `indexArray`.)
+ */
+function indexArray<T, U>(
+  list: Accessor<readonly T[]>,
+  mapFn: (value: Accessor<T>, index: number) => U,
+): () => U[] {
+  let items: T[] = [];
+  let mapped: U[] = [];
+  let disposers: Array<() => void> = [];
+  let signals: Array<(v: T) => void> = [];
+  let len = 0;
+
+  onCleanup(() => disposeAll(disposers));
+
+  return () => {
+    const newItems = (list() || []) as T[];
+    const newLen = newItems.length;
+    return untrack(() => {
+      if (newLen === 0) {
+        if (len !== 0) {
+          disposeAll(disposers);
+          disposers = [];
+          items = [];
+          mapped = [];
+          signals = [];
+          len = 0;
+        }
+        return mapped;
+      }
+      let i = 0;
+      for (; i < newLen; i++) {
+        if (i < len && items[i] !== newItems[i]) {
+          signals[i]!(newItems[i]!); // same slot, new value — no DOM move, no rebuild
+        } else if (i >= len) {
+          const j = i;
+          mapped[j] = createRoot((d) => {
+            disposers[j] = d;
+            const [value, setValue] = createSignal(newItems[j]!);
+            signals[j] = setValue as (v: T) => void;
+            return mapFn(value, j);
+          });
+        }
+      }
+      for (; i < len; i++) disposers[i]!(); // shrink: dispose tail rows
+      if (newLen < len) {
+        mapped.length = signals.length = disposers.length = newLen;
+      }
+      len = newLen;
+      items = newItems.slice();
+      return mapped.slice();
+    });
+  };
+}
+
+/**
+ * Render a reactive list, keyed by position. The value at each slot is an
+ * accessor; changing it updates in place without moving or rebuilding rows.
+ *
+ *   <Index each={cells}>{(value, i) => <input value={value()} />}</Index>
+ */
+export function Index<T>(props: {
+  each: readonly T[] | Accessor<readonly T[]>;
+  children: (value: Accessor<T>, index: number) => Child;
+}): Accessor<Child> {
+  const list = toAccessor(props.each) as Accessor<readonly T[]>;
+  return createMemo(indexArray<T, Child>(list, props.children)) as Accessor<Child>;
 }

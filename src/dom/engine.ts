@@ -30,6 +30,8 @@ export interface RenderBackend {
   setAttr(el: BNode, key: string, value: unknown): void;
   setStyle(el: BNode, name: string, value: string): void;
   listen(el: BNode, type: string, handler: (event: any) => void): void;
+  /** Next sibling, for keyed-reconcile move-skipping (DOM only; SSR returns null). */
+  nextSibling(node: BNode): BNode | null;
   /** DOM: a persistent reactive effect. SSR: run once, no subscription. */
   effect(run: () => void): void;
 }
@@ -164,10 +166,33 @@ function insert(b: RenderBackend, parent: BNode, value: Child, before: BNode | n
   for (const node of normalize(b, value)) b.insert(parent, node, before);
 }
 
-/** v1: naive full swap — correct for dynamic text/element. Keyed `<For>` later. */
+/**
+ * Reconcile the DOM at this position from `prev` node order to `next`, keyed by
+ * NODE IDENTITY: nodes present in both are reused (moved only if out of place),
+ * gone nodes are removed, new ones inserted. `<For>` reuses row-node instances,
+ * so this is what makes a reorder move existing DOM rather than rebuild it. An
+ * O(n) heuristic (skips no-op moves via nextSibling); not LIS-minimal, but every
+ * surviving row keeps its DOM + reactive scope.
+ */
 function reconcile(b: RenderBackend, parent: BNode, next: BNode[], anchor: BNode, prev: BNode[]): BNode[] {
-  for (const n of prev) b.remove(parent, n);
-  for (const n of next) b.insert(parent, n, anchor);
+  if (prev.length === 0) {
+    for (const n of next) b.insert(parent, n, anchor);
+    return next;
+  }
+  if (next.length === 0) {
+    for (const n of prev) b.remove(parent, n);
+    return next;
+  }
+  const keep = new Set(next);
+  for (const n of prev) if (!keep.has(n)) b.remove(parent, n);
+  // Place nodes right-to-left so each is inserted before its already-placed
+  // successor; skip a node already sitting in the right spot.
+  let after: BNode = anchor;
+  for (let i = next.length - 1; i >= 0; i--) {
+    const node = next[i]!;
+    if (b.nextSibling(node) !== after) b.insert(parent, node, after);
+    after = node;
+  }
   return next;
 }
 

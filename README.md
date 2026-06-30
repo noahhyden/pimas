@@ -17,7 +17,7 @@ tree-shaken away (every entry is pure ESM + `"sideEffects": false`).
 | `pimas` | reactive core — signals/effects/memos. **Headless** (browser *or* Node). | nothing else |
 | `pimas/dom` | DOM renderer + `render`/`h`/`Fragment`. | the core |
 | `pimas/server` | `renderToString` — same components, rendered to HTML (SSR / static prerender). | the core |
-| `pimas/flow` | control flow — `<Show>`/`<Switch>`/`<Match>` (keyed `<For>`/`<Index>` landing next). | the core |
+| `pimas/flow` | control flow — `<Show>`/`<Switch>`/`<Match>`, keyed `<For>`, position-keyed `<Index>`. | the core |
 | `pimas/jsx-runtime`, `pimas/jsx-dev-runtime` | automatic JSX runtime for TS's `react-jsx` transform | the renderer |
 
 The renderer is parameterized over a small `RenderBackend` contract, so `pimas/dom`
@@ -69,7 +69,7 @@ render(() => <Counter />, document.body); // only the text node updates on click
 | **1 — Reactive core** | `signal`/`effect`/`memo`/`batch`/`untrack`/`onCleanup`/`createRoot` — glitch-free push-pull (3-color), lazy memos | ✅ done |
 | **2 — DOM renderer + JSX** | `h`/`Fragment`/`render`, dynamic attrs & children via effects, automatic JSX runtime | ✅ done |
 | **3 — Backend seam + SVG** | renderer over a `RenderBackend` contract, SVG `createElementNS`, `pimas/server` `renderToString` | ✅ done |
-| **3b — Control flow** | `<Show>`/`<Switch>`/`<Match>` ✅ · keyed `<For>`/`<Index>` + per-row owner scopes ← next |
+| **3b — Control flow** | `<Show>`/`<Switch>`/`<Match>`, keyed `<For>`, position-keyed `<Index>`, per-row owner scopes | ✅ done |
 | 4 — Port noahhyden.com | rebuild pages, ship static HTML via `pimas/server`, delete the canvas runtime | — |
 | 5 — Optional | router, SSR/hydrate, compiler plugin, devtools | — |
 

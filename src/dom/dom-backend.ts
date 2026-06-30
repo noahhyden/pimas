@@ -63,6 +63,9 @@ export const domBackend: RenderBackend = {
   listen(el, type, handler) {
     (el as Element).addEventListener(type, handler);
   },
+  nextSibling(node) {
+    return (node as Node).nextSibling;
+  },
   effect(run) {
     createEffect(run);
   },
