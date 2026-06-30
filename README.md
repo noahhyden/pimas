@@ -7,32 +7,27 @@ Same engine class as [SolidJS](https://www.solidjs.com/): values are
 *observable*, and only the exact DOM nodes that read a changed value update.
 There is no diffing.
 
-## Packages
+## One package, subpath entry points
 
-A monorepo (npm workspaces) so you import only what you need. The dependency
-direction is one-way: renderer → core, never the reverse.
+`pimas` is a single package. You import only the surface you need; the rest is
+tree-shaken away (every entry is pure ESM + `"sideEffects": false`).
 
-| Package | What | Depends on |
+| Import | What | Pulls in |
 | --- | --- | --- |
-| [`@pimas/reactive`](packages/reactive) | reactive core — signals/effects/memos. Zero deps, headless (browser **or** Node). | — |
-| [`@pimas/dom`](packages/dom) | DOM renderer + JSX runtime *(Phase 2, stub)* | `@pimas/reactive` *(peer)* |
-| [`pimas`](packages/pimas) | one-install facade re-exporting the common surface | `@pimas/reactive` (+ `@pimas/dom` in Phase 2) |
+| `pimas` | reactive core — signals/effects/memos. **Headless** (browser *or* Node). | nothing else |
+| `pimas/dom` | DOM renderer + `render`/`h`/`Fragment`. | the core |
+| `pimas/jsx-runtime`, `pimas/jsx-dev-runtime` | automatic JSX runtime for TS's `react-jsx` transform | the renderer |
 
-The core is the irreducible kernel: anything reactive drags it in, but nothing
-else. Every package is pure ESM and `"sideEffects": false`, so a bundler strips
-unused exports. `@pimas/reactive` is a **peer** dependency of every runtime
-consumer, so an app only ever loads one copy of the kernel. Watch per-import
-cost with `npm run size`.
+Internally it's one module graph (the renderer imports the core via a relative
+path), so there is exactly **one** reactive kernel instance — no dual-package
+hazard, no peer-dependency wiring. The headless core is the irreducible floor:
+anything reactive includes it, nothing else does. Run `npm run size` to see the
+per-import cost.
 
-## Status
-
-| Phase | Scope | State |
-| --- | --- | --- |
-| **1 — Reactive core** | `signal` / `effect` / `memo` / `batch` / `untrack` / `onCleanup` / `createRoot` | ✅ done |
-| **2 — DOM renderer + JSX** | `h` / `Fragment` / `render`, dynamic attrs & children via effects, automatic JSX runtime | ✅ done |
-| 3 — Components + control flow | `<Show>`, `<For>` (keyed list reconciliation), SVG namespace | next |
-| 4 — Port noahhyden.com | rebuild pages as `.tsx`, ship static HTML, delete the canvas runtime | — |
-| 5 — Optional | router, SSR/prerender, compiler plugin, devtools | — |
+> Single-package-with-subpaths over a multi-package monorepo is a deliberate
+> choice for a solo-owned framework: one version, one changelog, zero
+> dual-kernel risk. Boundaries are kept by discipline (and later a lint rule),
+> not by `node_modules`.
 
 ## The idea in 30 seconds
 
@@ -40,34 +35,43 @@ cost with `npm run size`.
 import { createSignal, createEffect } from "pimas";
 
 const [count, setCount] = createSignal(0);
-
-createEffect(() => console.log("count is", count())); // logs "count is 0"
-
-setCount(1); // logs "count is 1"
-setCount(2); // logs "count is 2"
+createEffect(() => console.log("count is", count())); // "count is 0"
+setCount(1); // "count is 1"
 ```
 
-`createEffect` runs once, and the read of `count()` inside it registers a
-subscription. Each `setCount` re-runs *only* the effects that read that signal.
-That single mechanism — track-on-read, notify-on-write — is the entire engine.
-See [`src/reactive.ts`](src/reactive.ts); it's ~200 commented lines.
+`createEffect` runs once; reading `count()` subscribes it. Each `setCount`
+re-runs *only* the effects that read that signal. Track-on-read, notify-on-write
+— that single mechanism is the whole engine. See
+[`src/reactive/reactive.ts`](src/reactive/reactive.ts), ~200 commented lines.
+
+```tsx
+import { createSignal } from "pimas";
+import { render } from "pimas/dom";
+
+function Counter() {
+  const [n, setN] = createSignal(0);
+  return <button onClick={() => setN(n() + 1)}>count: {() => n()}</button>;
+}
+render(() => <Counter />, document.body); // only the text node updates on click
+```
+
+## Status
+
+| Phase | Scope | State |
+| --- | --- | --- |
+| **1 — Reactive core** | `signal`/`effect`/`memo`/`batch`/`untrack`/`onCleanup`/`createRoot` | ✅ done |
+| **2 — DOM renderer + JSX** | `h`/`Fragment`/`render`, dynamic attrs & children via effects, automatic JSX runtime | ✅ done |
+| 3 — Control flow + backend seam | `<Show>`/`<For>` (keyed), SVG namespace, renderer-over-a-backend-contract (so SSR is additive) | next |
+| 4 — Port noahhyden.com | rebuild pages, ship static HTML via a string backend, delete the canvas runtime | — |
+| 5 — Optional | router, SSR/hydrate, compiler plugin, devtools | — |
 
 ## Develop
 
 ```sh
 npm install
-npm test          # run the suite once
+npm test            # vitest, once
 npm run test:watch
 npm run typecheck
-npm run build     # emit dist/
+npm run size        # per-import gzip budgets
+npm run build       # emit dist/
 ```
-
-## API (Phase 1)
-
-- `createSignal(initial)` → `[read, write]` — a reactive value.
-- `createEffect(fn)` — run `fn`, re-run when its tracked signals change.
-- `createMemo(fn)` → `read` — a cached derived value (also a signal).
-- `batch(fn)` — coalesce multiple writes into one flush.
-- `untrack(fn)` — read signals without subscribing.
-- `onCleanup(fn)` — teardown before re-run / on disposal.
-- `createRoot(fn)` — a disposable ownership scope to mount under.

@@ -1,8 +1,8 @@
 /**
- * @pimas/dom — the DOM renderer.
+ * pimas/dom — the DOM renderer.
  *
  * Turns components into REAL DOM nodes once, and wraps each *dynamic* binding
- * in an effect from @pimas/reactive so only that node updates when a signal
+ * in an effect from the reactive core so only that node updates when a signal
  * changes. No virtual DOM, no diffing of the static structure.
  *
  * Dynamic bindings are signalled by passing a FUNCTION (a thunk):
@@ -15,7 +15,7 @@
  * A future compiler (Phase 5) will let you drop the `() =>` and infer it; until
  * then the thunk is the explicit, honest marker of "this is reactive".
  */
-import { createEffect, createRoot, untrack } from "@pimas/reactive";
+import { createEffect, createRoot, untrack } from "../reactive/index.js";
 
 /** Anything that can appear as a child in the tree. */
 export type Child =

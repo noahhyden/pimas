@@ -7,7 +7,7 @@ import {
   untrack,
   onCleanup,
   createRoot,
-} from "../src/reactive.js";
+} from "pimas";
 
 describe("createSignal", () => {
   it("reads and writes a value", () => {

@@ -1,21 +1,39 @@
 {
-  "name": "pimas-monorepo",
+  "name": "pimas",
   "version": "0.0.0",
-  "private": true,
+  "description": "A fine-grained reactive UI framework. Own your stack.",
   "type": "module",
   "license": "MIT",
   "author": "Noah Hyden",
-  "description": "Pimas — a fine-grained reactive UI framework. Own your stack.",
-  "workspaces": [
-    "packages/*"
-  ],
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/reactive/index.d.ts",
+      "import": "./dist/reactive/index.js"
+    },
+    "./dom": {
+      "types": "./dist/dom/index.d.ts",
+      "import": "./dist/dom/index.js"
+    },
+    "./jsx-runtime": {
+      "types": "./dist/dom/jsx-runtime.d.ts",
+      "import": "./dist/dom/jsx-runtime.js"
+    },
+    "./jsx-dev-runtime": {
+      "types": "./dist/dom/jsx-dev-runtime.d.ts",
+      "import": "./dist/dom/jsx-dev-runtime.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": ["dist", "src"],
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "build": "npm run build --workspaces --if-present",
+    "build": "tsc -p tsconfig.build.json",
     "size": "node scripts/size.mjs"
   },
+  "keywords": ["reactive", "signals", "ui", "framework", "fine-grained"],
   "devDependencies": {
     "esbuild": "^0.24.2",
     "happy-dom": "^16.5.3",

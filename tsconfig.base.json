@@ -1,5 +1,5 @@
 {
-  "//": "Shared compiler options. Each package extends this; the root tsconfig.json adds path mapping for cross-package typecheck from source.",
+  "//": "Shared compiler options. tsconfig.json (typecheck) and tsconfig.build.json (emit) both extend this.",
   "compilerOptions": {
     "target": "ESNext",
     "module": "ESNext",
@@ -16,6 +16,6 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "jsx": "react-jsx",
-    "jsxImportSource": "@pimas/dom"
+    "jsxImportSource": "pimas"
   }
 }

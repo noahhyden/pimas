@@ -1,5 +1,5 @@
 /**
- * @pimas/dom/jsx-dev-runtime — dev variant of the automatic runtime.
+ * pimas/jsx-dev-runtime — dev variant of the automatic runtime.
  *
  * TS emits calls to `jsxDEV` (with extra source-location args) when compiling
  * in development mode. We ignore the debug args and delegate to `jsx`.

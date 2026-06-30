@@ -15,21 +15,19 @@ import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const src = (pkg) => resolve(root, "packages", pkg, "src/index.ts");
+const src = (p) => resolve(root, "src", p);
 
-// Resolve @pimas/* to package source so we measure what ships, build-free.
+// Resolve the public subpaths to source so we measure what ships, build-free.
 const alias = {
-  "@pimas/reactive": src("reactive"),
-  "@pimas/dom": src("dom"),
-  pimas: src("pimas"),
+  pimas: src("reactive/index.ts"),
+  "pimas/dom": src("dom/index.ts"),
 };
 
 // name -> [fixture code, gzip byte budget | null]
 const fixtures = {
-  "reactive: signal only": [`import { createSignal } from "@pimas/reactive"; createSignal(0);`, 800],
-  "reactive: full surface": [`import * as R from "@pimas/reactive"; globalThis.x = R;`, 1500],
-  "facade: createSignal": [`import { createSignal } from "pimas"; createSignal(0);`, 800],
-  "dom: render + h": [`import { render, h } from "@pimas/dom"; globalThis.x = [render, h];`, 1200],
+  "core: signal only": [`import { createSignal } from "pimas"; createSignal(0);`, 800],
+  "core: full surface": [`import * as R from "pimas"; globalThis.x = R;`, 1500],
+  "dom: render + h": [`import { render, h } from "pimas/dom"; globalThis.x = [render, h];`, 1200],
 };
 
 let failed = false;

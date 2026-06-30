@@ -1,9 +1,9 @@
 /**
- * @pimas/dom/jsx-runtime — the automatic JSX runtime.
+ * pimas/jsx-runtime — the automatic JSX runtime.
  *
  * TS's `react-jsx` transform compiles <div>{x}</div> into calls to `jsx` /
  * `jsxs` imported from here (because tsconfig sets jsxImportSource to
- * "@pimas/dom"). Both forward to `h`; children live on `props.children`.
+ * "pimas"). Both forward to `h`; children live on `props.children`.
  */
 import { h, Fragment as _Fragment, type Child, type Props } from "./index.js";
 

@@ -1,15 +1,15 @@
 {
-  "//": "Root config for `npm run typecheck`. Maps @pimas/* to package SOURCE so the whole monorepo type-checks without building dists first.",
+  "//": "Typecheck config. Maps the public subpaths to source so .tsx files resolve the JSX runtime and `pimas`/`pimas/dom` imports without a build.",
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "noEmit": true,
     "baseUrl": ".",
     "paths": {
-      "@pimas/reactive": ["./packages/reactive/src/index.ts"],
-      "@pimas/dom": ["./packages/dom/src/index.ts"],
-      "@pimas/dom/jsx-runtime": ["./packages/dom/src/jsx-runtime.ts"],
-      "@pimas/dom/jsx-dev-runtime": ["./packages/dom/src/jsx-dev-runtime.ts"]
+      "pimas": ["./src/reactive/index.ts"],
+      "pimas/dom": ["./src/dom/index.ts"],
+      "pimas/jsx-runtime": ["./src/dom/jsx-runtime.ts"],
+      "pimas/jsx-dev-runtime": ["./src/dom/jsx-dev-runtime.ts"]
     }
   },
-  "include": ["packages/*/src", "packages/*/test"]
+  "include": ["src", "test"]
 }

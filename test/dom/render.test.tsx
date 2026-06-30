@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { createSignal } from "@pimas/reactive";
-import { render } from "@pimas/dom";
+import { createSignal } from "pimas";
+import { render } from "pimas/dom";
 
 describe("render", () => {
   it("mounts a component and updates text fine-grained on signal change", () => {
