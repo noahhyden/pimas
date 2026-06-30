@@ -11,6 +11,7 @@ export default defineConfig({
       { find: "pimas/jsx-dev-runtime", replacement: src("dom/jsx-dev-runtime.ts") },
       { find: "pimas/jsx-runtime", replacement: src("dom/jsx-runtime.ts") },
       { find: "pimas/dom", replacement: src("dom/index.ts") },
+      { find: "pimas/server", replacement: src("server/index.ts") },
       { find: /^pimas$/, replacement: src("reactive/index.ts") },
     ],
   },

@@ -16,7 +16,13 @@ tree-shaken away (every entry is pure ESM + `"sideEffects": false`).
 | --- | --- | --- |
 | `pimas` | reactive core — signals/effects/memos. **Headless** (browser *or* Node). | nothing else |
 | `pimas/dom` | DOM renderer + `render`/`h`/`Fragment`. | the core |
+| `pimas/server` | `renderToString` — same components, rendered to HTML (SSR / static prerender). | the core |
 | `pimas/jsx-runtime`, `pimas/jsx-dev-runtime` | automatic JSX runtime for TS's `react-jsx` transform | the renderer |
+
+The renderer is parameterized over a small `RenderBackend` contract, so `pimas/dom`
+(live nodes, persistent effects) and `pimas/server` (run-once, serialize) run the
+**same component code**. That seam is what makes SSR/hydration additive rather than
+a rewrite.
 
 Internally it's one module graph (the renderer imports the core via a relative
 path), so there is exactly **one** reactive kernel instance — no dual-package
@@ -61,8 +67,9 @@ render(() => <Counter />, document.body); // only the text node updates on click
 | --- | --- | --- |
 | **1 — Reactive core** | `signal`/`effect`/`memo`/`batch`/`untrack`/`onCleanup`/`createRoot` | ✅ done |
 | **2 — DOM renderer + JSX** | `h`/`Fragment`/`render`, dynamic attrs & children via effects, automatic JSX runtime | ✅ done |
-| 3 — Control flow + backend seam | `<Show>`/`<For>` (keyed), SVG namespace, renderer-over-a-backend-contract (so SSR is additive) | next |
-| 4 — Port noahhyden.com | rebuild pages, ship static HTML via a string backend, delete the canvas runtime | — |
+| **3 — Backend seam + SVG** | renderer over a `RenderBackend` contract, SVG `createElementNS`, `pimas/server` `renderToString` | ✅ done |
+| 3b — Control flow | `<Show>`/`<Switch>`, keyed `<For>`/`<Index>`, per-row owner scopes | next |
+| 4 — Port noahhyden.com | rebuild pages, ship static HTML via `pimas/server`, delete the canvas runtime | — |
 | 5 — Optional | router, SSR/hydrate, compiler plugin, devtools | — |
 
 ## Develop

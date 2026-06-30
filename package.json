@@ -15,6 +15,10 @@
       "types": "./dist/dom/index.d.ts",
       "import": "./dist/dom/index.js"
     },
+    "./server": {
+      "types": "./dist/server/index.d.ts",
+      "import": "./dist/server/index.js"
+    },
     "./jsx-runtime": {
       "types": "./dist/dom/jsx-runtime.d.ts",
       "import": "./dist/dom/jsx-runtime.js"

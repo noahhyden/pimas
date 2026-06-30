@@ -21,13 +21,17 @@ const src = (p) => resolve(root, "src", p);
 const alias = {
   pimas: src("reactive/index.ts"),
   "pimas/dom": src("dom/index.ts"),
+  "pimas/server": src("server/index.ts"),
 };
 
 // name -> [fixture code, gzip byte budget | null]
 const fixtures = {
   "core: signal only": [`import { createSignal } from "pimas"; createSignal(0);`, 800],
   "core: full surface": [`import * as R from "pimas"; globalThis.x = R;`, 1500],
-  "dom: render + h": [`import { render, h } from "pimas/dom"; globalThis.x = [render, h];`, 1200],
+  // Re-baselined 1200→1600 in Phase 3: the backend-contract seam (makes SSR
+  // additive) + the SVG tag-set for createElementNS. Deliberate, not silent.
+  "dom: render + h": [`import { render, h } from "pimas/dom"; globalThis.x = [render, h];`, 1600],
+  "server: renderToString": [`import { renderToString } from "pimas/server"; globalThis.x = renderToString;`, 1300],
 };
 
 let failed = false;

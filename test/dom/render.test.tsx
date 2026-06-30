@@ -77,4 +77,22 @@ describe("render", () => {
     setN(1); // effect disposed → no throw, no work
     expect(root.innerHTML).toBe("");
   });
+
+  it("creates SVG elements in the SVG namespace", () => {
+    const root = document.createElement("div");
+    render(
+      () => (
+        <svg viewBox="0 0 10 10">
+          <circle cx="5" cy="5" r="4" />
+        </svg>
+      ),
+      root,
+    );
+    const svg = root.querySelector("svg")!;
+    const circle = root.querySelector("circle")!;
+    const SVG_NS = "http://www.w3.org/2000/svg";
+    expect(svg.namespaceURI).toBe(SVG_NS);
+    expect(circle.namespaceURI).toBe(SVG_NS); // not an HTMLUnknownElement
+    expect(circle.getAttribute("r")).toBe("4");
+  });
 });

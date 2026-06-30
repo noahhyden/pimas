@@ -7,6 +7,7 @@
     "paths": {
       "pimas": ["./src/reactive/index.ts"],
       "pimas/dom": ["./src/dom/index.ts"],
+      "pimas/server": ["./src/server/index.ts"],
       "pimas/jsx-runtime": ["./src/dom/jsx-runtime.ts"],
       "pimas/jsx-dev-runtime": ["./src/dom/jsx-dev-runtime.ts"]
     }
