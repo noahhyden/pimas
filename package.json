@@ -19,6 +19,10 @@
       "types": "./dist/server/index.d.ts",
       "import": "./dist/server/index.js"
     },
+    "./flow": {
+      "types": "./dist/flow/index.d.ts",
+      "import": "./dist/flow/index.js"
+    },
     "./jsx-runtime": {
       "types": "./dist/dom/jsx-runtime.d.ts",
       "import": "./dist/dom/jsx-runtime.js"

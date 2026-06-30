@@ -22,6 +22,7 @@ const alias = {
   pimas: src("reactive/index.ts"),
   "pimas/dom": src("dom/index.ts"),
   "pimas/server": src("server/index.ts"),
+  "pimas/flow": src("flow/index.ts"),
 };
 
 // name -> [fixture code, gzip byte budget | null]
@@ -35,6 +36,7 @@ const fixtures = {
   "core: full surface": [`import * as R from "pimas"; globalThis.x = R;`, 1000],
   "dom: render + h": [`import { render, h } from "pimas/dom"; globalThis.x = [render, h];`, 1800],
   "server: renderToString": [`import { renderToString } from "pimas/server"; globalThis.x = renderToString;`, 1350],
+  "flow: Show + Switch": [`import { Show, Switch, Match } from "pimas/flow"; globalThis.x = [Show, Switch, Match];`, 900],
 };
 
 let failed = false;
