@@ -231,3 +231,17 @@ so both resolve to the one installed package → one kernel instance. The lesson
 generalizes: any consumer that both authors components AND drives a renderer must
 guarantee a single engine instance. (Also: never evaluate JSX at module top level
 — it runs `h()` before any `renderWith` sets the backend; make icons components.)
+
+### 27. Self-hosted fonts → true zero external requests (site)
+A parallel clean-room font-research agent (standing rule) confirmed the approach.
+The Google Fonts `<link>`s were the only thing breaking the site's headline
+metric. Now fonts are same-origin: `build.mjs` vendors woff2 from Fontsource
+(OFL), ships the license, generates `@font-face` (latin + latin-ext,
+`unicode-range`, `font-display:swap`), and preloads the two above-the-fold faces
+(Spectral 500 hero, IBM Plex Sans 400 body). **All static instances** — Spectral
+and IBM Plex Mono have no variable build, and for these narrow axes static is both
+smaller and simpler (the rare case where smallest = simplest). Verified in-browser:
+resource timing reports zero external hosts. Footer #25 updated from the honest
+"fonts only" to the now-true **0 external requests**. All five pages ported, 0 KB
+JS, 0 external requests. Only the deployment swap remains for Phase 4 (deferred —
+"when we get there").
