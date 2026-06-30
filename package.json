@@ -1,0 +1,29 @@
+{
+  "name": "pimas",
+  "version": "0.0.0",
+  "description": "A fine-grained reactive UI framework. Own your stack.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Noah Hyden",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "src"],
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.build.json"
+  },
+  "keywords": ["reactive", "signals", "ui", "framework", "fine-grained"],
+  "devDependencies": {
+    "typescript": "^5.7.2",
+    "vitest": "^3.0.5"
+  }
+}
