@@ -29,8 +29,8 @@ cost with `npm run size`.
 | Phase | Scope | State |
 | --- | --- | --- |
 | **1 — Reactive core** | `signal` / `effect` / `memo` / `batch` / `untrack` / `onCleanup` / `createRoot` | ✅ done |
-| 2 — DOM renderer + JSX | `h` / `Fragment` / `render`, dynamic attrs & children via effects | next |
-| 3 — Components + control flow | props, `<Show>`, `<For>` (keyed list reconciliation) | — |
+| **2 — DOM renderer + JSX** | `h` / `Fragment` / `render`, dynamic attrs & children via effects, automatic JSX runtime | ✅ done |
+| 3 — Components + control flow | `<Show>`, `<For>` (keyed list reconciliation), SVG namespace | next |
 | 4 — Port noahhyden.com | rebuild pages as `.tsx`, ship static HTML, delete the canvas runtime | — |
 | 5 — Optional | router, SSR/prerender, compiler plugin, devtools | — |
 

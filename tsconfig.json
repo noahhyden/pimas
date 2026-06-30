@@ -6,7 +6,9 @@
     "baseUrl": ".",
     "paths": {
       "@pimas/reactive": ["./packages/reactive/src/index.ts"],
-      "@pimas/dom": ["./packages/dom/src/index.ts"]
+      "@pimas/dom": ["./packages/dom/src/index.ts"],
+      "@pimas/dom/jsx-runtime": ["./packages/dom/src/jsx-runtime.ts"],
+      "@pimas/dom/jsx-dev-runtime": ["./packages/dom/src/jsx-dev-runtime.ts"]
     }
   },
   "include": ["packages/*/src", "packages/*/test"]

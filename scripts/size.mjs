@@ -29,6 +29,7 @@ const fixtures = {
   "reactive: signal only": [`import { createSignal } from "@pimas/reactive"; createSignal(0);`, 800],
   "reactive: full surface": [`import * as R from "@pimas/reactive"; globalThis.x = R;`, 1500],
   "facade: createSignal": [`import { createSignal } from "pimas"; createSignal(0);`, 800],
+  "dom: render + h": [`import { render, h } from "@pimas/dom"; globalThis.x = [render, h];`, 1200],
 };
 
 let failed = false;

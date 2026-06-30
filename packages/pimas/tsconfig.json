@@ -4,7 +4,8 @@
     "noEmit": true,
     "baseUrl": ".",
     "paths": {
-      "@pimas/reactive": ["../reactive/src/index.ts"]
+      "@pimas/reactive": ["../reactive/src/index.ts"],
+      "@pimas/dom": ["../dom/src/index.ts"]
     }
   },
   "include": ["src"]

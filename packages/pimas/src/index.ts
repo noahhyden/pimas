@@ -9,6 +9,7 @@
  * pure re-export + `"sideEffects": false`, so a bundler shakes out whatever
  * you don't use.
  *
- * Phase 2 adds the DOM renderer re-export here:  export * from "@pimas/dom";
+ * Re-exports the reactive core and the DOM renderer.
  */
 export * from "@pimas/reactive";
+export * from "@pimas/dom";

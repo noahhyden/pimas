@@ -17,7 +17,8 @@
   },
   "files": ["dist", "src"],
   "dependencies": {
-    "@pimas/reactive": "*"
+    "@pimas/reactive": "*",
+    "@pimas/dom": "*"
   },
   "keywords": ["reactive", "signals", "ui", "framework"]
 }
