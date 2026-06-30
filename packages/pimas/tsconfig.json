@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@pimas/reactive": ["../reactive/src/index.ts"]
+    }
+  },
+  "include": ["src"]
+}

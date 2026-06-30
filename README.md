@@ -15,11 +15,14 @@ direction is one-way: renderer → core, never the reverse.
 | Package | What | Depends on |
 | --- | --- | --- |
 | [`@pimas/reactive`](packages/reactive) | reactive core — signals/effects/memos. Zero deps, headless (browser **or** Node). | — |
-| [`@pimas/dom`](packages/dom) | DOM renderer + JSX runtime *(Phase 2, stub)* | `@pimas/reactive` |
+| [`@pimas/dom`](packages/dom) | DOM renderer + JSX runtime *(Phase 2, stub)* | `@pimas/reactive` *(peer)* |
+| [`pimas`](packages/pimas) | one-install facade re-exporting the common surface | `@pimas/reactive` (+ `@pimas/dom` in Phase 2) |
 
 The core is the irreducible kernel: anything reactive drags it in, but nothing
 else. Every package is pure ESM and `"sideEffects": false`, so a bundler strips
-unused exports.
+unused exports. `@pimas/reactive` is a **peer** dependency of every runtime
+consumer, so an app only ever loads one copy of the kernel. Watch per-import
+cost with `npm run size`.
 
 ## Status
 
