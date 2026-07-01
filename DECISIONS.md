@@ -518,3 +518,38 @@ enclosing boundary, walked up the OWNER tree exactly like context (#10) — surv
 - **Cost:** handleError + the update() catch land in the indivisible kernel, so every core-pulling
   fixture pays ~+86 gz — signal 700→725, full 1000→1125, dom 1875→1950, store 1400→1475; new
   `flow: ErrorBoundary` fixture 912 gz (budget 1000). 15 tests; 84 total green. Committed `f9fadce`.
+- **Real-browser coverage:** added `browser-test/` fixtures for onMount + ErrorBoundary (real focus,
+  real-DOM throw/catch/reset) — `npm run test:browser` now 15/15 in real Chrome (was 9).
+
+### 39. klarum.com fully rebuilt on pimas (Phase-5 dogfood complete — supersedes #35/#36 milestones)
+The intermediate-stakes dogfood (#15) is DONE on the `pimas-port` branch of `Klarum-Software/klarum-landing`
+(NOT merged to main — a test branch, per direction). Scope far beyond the #35/#36 milestones (home +
+FAQ + records): **19 routes** — 18 faithful marketing pages (auto-discovered `src/pages/*.tsx`, wrapped
+in a shared `Layout`, nav-active via `meta.path` with 0 client JS, Tailwind v4 compiled+inlined,
+self-hosted fonts) + a 10-demo interactive `/showcase/`. Every static page ships **0 KB JS**; island
+pages share one pimas kernel chunk.
+- **The showcase is ONE island** (islands don't share signals across `<is-land>` boundaries) that imports
+  the demo components directly and switches them with `<Switch>`/`<Match>` on a `demoTab` signal.
+- **10 demos** exercising the full surface: records/items/issuers/inbound (`createStore`), discovery/
+  workspace (signals + `<Switch>`), pricing (interval toggle), automations/agent (timed state machines
+  via a ~15-line userland `_timer.ts` `useSequence`/`useInterval` — timers arm in `onMount`, SSR no-op),
+  analytics (hand-built SVG `BarChart`/`LineChart` replacing recharts, ~1.3 KB vs ~90 KB gz),
+  knowledge-graph (inline SVG constellation + ResizeObserver-in-`onMount`).
+- **Verified across three layers:** static reactivity review (all 10), browser interaction, and runtime
+  timers (automations run→done, EOI progressive reveal, agent playback→"answer ready"). Pre-merge audit:
+  0 blockers (honest per-page byte metric via esbuild metafile, a11y labels, trailing-slash links).
+- **NO framework growth for the whole rebuild** beyond onMount (#37) + ErrorBoundary (#38); every demo is
+  userland. Autonomous-loop decision log w/ full detail: issue #11 (D1–D12).
+
+### 40. `<Show>`/`<Match>` capture-freeze — read the gated value INSIDE the child thunk (gotcha)
+Found + fixed two real bugs in the klarum port (items detail pane, knowledge-graph evidence panel both
+FROZEN to the first item). Root cause is a genuine pimas semantics sharp edge, same family as the
+thunk-children caveat in #28 and the staleness footgun in #21: **`<Show when={x}>` / `<Switch>`/`<Match>`
+memoize the gate to a boolean/selected-case; the child thunk re-runs ONLY when that flips, not when the
+underlying value changes.** So if the gate is non-null by default (never flips) and the child captures
+`const v = selected()!` ONCE, every `v.field` read is frozen at the first value — clicking a different
+row updates the signal but not the pane. **Rule: never capture a signal's value at the top of a `<Show>`/
+`<Match>` child; read it inside per-node thunks** — `const sel = () => selected()!; …{() => sel().title}`,
+`<For each={() => sel().items}>`, `onClick={() => f(sel().id)}`. The correctly-written demos (discovery,
+issuers) already did this; the bug only hit the two that captured once. Committed `ea1c7f0`. This is
+exactly what the deferred dev-warning (#21 / issue #9) should catch — cross-linked.
