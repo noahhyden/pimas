@@ -239,6 +239,16 @@ export function batch<T>(fn: () => T): T {
   }
 }
 
+/**
+ * The computation currently tracking, or null outside any effect/memo. Lets
+ * userland primitives (e.g. `pimas/store`) skip work when nobody is listening —
+ * a store read outside a reactive scope then creates no signal. Opaque handle;
+ * treat it as truthy/falsy.
+ */
+export function getListener(): unknown {
+  return currentObserver;
+}
+
 /** Read signals inside `fn` without subscribing the current computation. */
 export function untrack<T>(fn: () => T): T {
   const prev = currentObserver;

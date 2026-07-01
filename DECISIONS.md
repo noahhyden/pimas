@@ -141,7 +141,7 @@ site port goes first; this cluster is **pre-Klarum** (Klarum apps will need stor
 + context):
 1. `createContext`/`useContext` — LOW cost, the owner tree is already the substrate. Highest-leverage cheap win. **BUILT — see #28.**
 2. `<ErrorBoundary>`/`catchError` — LOW–MED; wrap update/component in try/catch, propagate up the owner tree.
-3. `createStore` (nested reactive proxy) — HIGHEST real-app value (an object in one signal re-runs everything on any field change); pure userland-of-the-kernel, no core change.
+3. `createStore` (nested reactive proxy) — HIGHEST real-app value (an object in one signal re-runs everything on any field change); pure userland-of-the-kernel, no core change. **BUILT — see #34.**
 4. `hydrate()` — seam-ready (the `<!---->` anchors are already emitted on both sides); needs a backend mode that *adopts* existing DOM instead of creating it. **Superseded by the islands model (#29–#32): client-render islands first; the CLAIM/hydrate backend is deferred to islands that visibly flash.**
 5. Scheduler seam — microtask flush + parent/child effect ordering; the precondition for any future concurrency/transitions. Current flush is synchronous (simple, debuggable, but no ordering guarantee and forecloses concurrency).
 6. Compiler (thunk-eraser) — Phase 5 anchor; erases the `{() => x()}` tax every comparable framework eventually compiled away. Sequence last, against a stable runtime API.
@@ -376,3 +376,28 @@ Built end-to-end on noahhyden.com and verified in a real browser (WebBridge):
   the claim/hydrate backend, per-island byte attribution (sum-of-all-islands is exact at
   N=1), content-hashed island filenames. Next: `createStore` (#18.3) for klarum's stateful
   islands, then apply the pipeline to klarum's home page + first real island.
+
+### 34. `createStore` — nested reactive proxy, new `pimas/store` subpath (backlog #18.3)
+The highest real-app-value primitive, for klarum's stateful islands (the records
+spreadsheet, the agent state machine). A parallel comparative research agent (standing
+rule) verified the design against Solid's `store.ts`, Svelte 5's `proxy.js`, and Vue 3's
+`baseHandlers.ts`; findings adopted below. Headless (`pimas/store`, no DOM) so the Klarum
+token engine can use it in Node. **Design:** a read-only deep Proxy over the raw object,
+which is the single source of truth. Reading a property lazily creates + subscribes a
+per-key "ping" signal (a monotonic counter → always notifies; dedup done in the setter via
+`Object.is`, mirroring Solid's `equals:false` nodes). A per-object `$KEYS` signal makes
+`length`/`in`/`Object.keys`/iteration reactive. Proxies are cached per raw object (`WeakMap`)
+for **stable identity** — so identity-keyed `<For>` still reuses rows. Writes go through a
+variadic `setStore(...path, value)` (path-navigate + leaf set) supporting functional updaters
+and root/partial merge, wrapped in `batch` so a multi-field set flushes dependents once.
+**Adopted from research:** (a) a `getListener()` guard (added to the core) so reads OUTSIDE
+any effect/SSR create no signal — critical for a thousand-cell grid; (b) `__proto__` write
+guard; (c) verified `{...spread}`/`Object.assign` don't trip the Proxy invariant (our props
+are configurable, so Solid's getter-conversion in `getOwnPropertyDescriptor` isn't needed yet).
+**Verified against `<For>`:** For's memo reads `.length` (→ subscribes `$KEYS`) and diffs
+per-index under `untrack`, so a cell-field edit re-runs only that cell's binding, never the
+whole list; structural changes (length / slot replacement) re-run For. **Deferred to v2**
+(research concurred): `produce` (mutable-draft sugar) and `reconcile` (diff external data
+preserving identity) — `reconcile` first if klarum does server-refresh of keyed lists. 12
+tests. Size: new fixture `store: createStore` 1363 gz (budget 1400, initial baseline — includes
+the kernel); `core: full surface` 963→979 gz for `getListener`. 65 tests total green.

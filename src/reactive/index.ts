@@ -11,6 +11,7 @@ export {
   createMemo,
   batch,
   untrack,
+  getListener,
   onCleanup,
   createRoot,
   createContext,

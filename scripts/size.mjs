@@ -23,6 +23,7 @@ const alias = {
   "pimas/dom": src("dom/index.ts"),
   "pimas/server": src("server/index.ts"),
   "pimas/flow": src("flow/index.ts"),
+  "pimas/store": src("store/index.ts"),
 };
 
 // name -> [fixture code, gzip byte budget | null]
@@ -42,6 +43,7 @@ const fixtures = {
   "server: renderToString": [`import { renderToString } from "pimas/server"; globalThis.x = renderToString;`, 1350],
   "flow: Show + Switch": [`import { Show, Switch, Match } from "pimas/flow"; globalThis.x = [Show, Switch, Match];`, 900],
   "flow: For (keyed)": [`import { For } from "pimas/flow"; globalThis.x = For;`, 1350],
+  "store: createStore": [`import { createStore } from "pimas/store"; globalThis.x = createStore;`, 1400],
 };
 
 let failed = false;
