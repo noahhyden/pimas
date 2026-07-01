@@ -18,6 +18,11 @@
  * that drive the pull). Algorithm after Milo Hansen's "Reactively".
  */
 
+// Type-only (erased at build — no runtime coupling to the DOM layer). Context's
+// Provider is a JSX component, so its return must be the renderer's Child type;
+// `flow` imports it the same way. The reactive core ships zero DOM code.
+import type { Child } from "../dom/engine.js";
+
 // ── Node model ───────────────────────────────────────────────────────────
 
 type State = 0 | 1 | 2;
@@ -41,6 +46,9 @@ interface Reactive<T = any> {
   owned: Reactive[];
   cleanups: Array<() => void>;
   equals: (a: T, b: T) => boolean;
+  /** Context values provided at this scope, keyed by context id. Lazily created
+   *  — only `<Provider>` nodes carry one, so plain signals/effects pay nothing. */
+  context?: Record<symbol, unknown>;
 }
 
 // ── Globals ──────────────────────────────────────────────────────────────
@@ -260,4 +268,59 @@ export function createRoot<T>(fn: (dispose: () => void) => T): T {
   } finally {
     currentOwner = prevOwner;
   }
+}
+
+// ── Context ──────────────────────────────────────────────────────────────────
+
+/**
+ * A context: a value any descendant can read without prop-drilling. Created by
+ * `createContext`; provided by `ctx.Provider`; read by `useContext(ctx)`.
+ *
+ * Context rides the OWNER tree (#10), not the DOM tree — so it survives portals
+ * and (later) serialization. `useContext` walks the owner chain upward to the
+ * nearest provider; absent one, it returns the context's default.
+ */
+export interface Context<T> {
+  /** Unique key under which this context's value is stored on a provider node. */
+  readonly id: symbol;
+  /** Value `useContext` returns when no provider is found above the reader. */
+  readonly defaultValue: T;
+  /** Component that supplies `value` to everything in its `children` subtree. */
+  Provider: (props: { value: T; children: Child }) => Child;
+}
+
+export function createContext<T>(defaultValue: T): Context<T>;
+export function createContext<T>(): Context<T | undefined>;
+export function createContext<T>(defaultValue?: T): Context<T | undefined> {
+  const id = Symbol("pimas.context");
+  return {
+    id,
+    defaultValue,
+    Provider(props) {
+      // A memo gives us a fresh OWNER scope (like Show/Switch): the value is
+      // stamped on that scope's node, and children are built *inside* it, so
+      // their owner chain runs through here and `useContext` finds the value.
+      // NOTE (pre-compiler): children must be a THUNK — `{() => <App/>}` — or
+      // they'd be evaluated before this scope exists (same rule as <Show>).
+      return createMemo(() => {
+        (currentOwner!.context ??= {})[id] = props.value;
+        return typeof props.children === "function"
+          ? (props.children as () => Child)()
+          : props.children;
+      });
+    },
+  };
+}
+
+/**
+ * Read the nearest provided value for `context`, or its default if no
+ * `ctx.Provider` sits above the current owner. Call it during a component's
+ * setup (synchronously), so `currentOwner` points into the provider's subtree.
+ */
+export function useContext<T>(context: Context<T>): T {
+  for (let node = currentOwner; node; node = node.owner) {
+    const ctx = node.context;
+    if (ctx && context.id in ctx) return ctx[context.id] as T;
+  }
+  return context.defaultValue;
 }

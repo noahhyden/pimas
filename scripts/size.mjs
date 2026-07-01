@@ -31,10 +31,14 @@ const alias = {
 // bloat. Even a bare signal drags the propagation code it references (the
 // kernel is indivisible). Deliberate bumps, not silent: signal 192→588,
 // dom 1505→1673 gz.
+// Re-baselined in Phase 5 (#30): the `listen` seam now accepts a handler
+// DESCRIPTOR (not only a bare closure) so resumability stays additive later —
+// a deliberate foundational capability. Cost is in the DOM backend's listen:
+// dom 1790→1850 gz. Conscious bump, not bloat.
 const fixtures = {
   "core: signal only": [`import { createSignal } from "pimas"; createSignal(0);`, 700],
   "core: full surface": [`import * as R from "pimas"; globalThis.x = R;`, 1000],
-  "dom: render + h": [`import { render, h } from "pimas/dom"; globalThis.x = [render, h];`, 1800],
+  "dom: render + h": [`import { render, h } from "pimas/dom"; globalThis.x = [render, h];`, 1850],
   "server: renderToString": [`import { renderToString } from "pimas/server"; globalThis.x = renderToString;`, 1350],
   "flow: Show + Switch": [`import { Show, Switch, Match } from "pimas/flow"; globalThis.x = [Show, Switch, Match];`, 900],
   "flow: For (keyed)": [`import { For } from "pimas/flow"; globalThis.x = For;`, 1350],

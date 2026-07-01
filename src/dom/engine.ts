@@ -17,6 +17,26 @@ type BNode = any;
  * no diff/patch — only "create nodes" + "run a binding". `effect` is the seam
  * that separates live (DOM, persistent, reactive) from run-once (SSR).
  */
+/** A plain event handler — the closure form (works today, always). */
+export type EventHandler<E = any> = (event: E) => void;
+
+/**
+ * A handler as an addressable, serializable REFERENCE rather than a live closure.
+ * The seam accepts this now (DECISIONS #30) but only the synchronous `load()`
+ * path is implemented; the rest is reserved so resumability is additive later:
+ *  - `ref`     a stable, build-assignable symbol id (for `on:<type>="ref#…"` HTML)
+ *  - `load`    resolves the actual handler; synchronous today, `import()` later
+ *  - `capture` the handler's serializable captured values (the resumable-state
+ *              channel; carried, not required, so authored captures stay nameable)
+ */
+export interface HandlerDescriptor<E = any> {
+  ref: string;
+  load: () => EventHandler<E> | Promise<EventHandler<E>>;
+  capture?: unknown[];
+}
+
+export type Handler<E = any> = EventHandler<E> | HandlerDescriptor<E>;
+
 export interface RenderBackend {
   element(tag: string): BNode;
   text(value: string): BNode;
@@ -29,7 +49,9 @@ export interface RenderBackend {
   /** Set one resolved attribute/property. The backend decides prop vs attr. */
   setAttr(el: BNode, key: string, value: unknown): void;
   setStyle(el: BNode, name: string, value: string): void;
-  listen(el: BNode, type: string, handler: (event: any) => void): void;
+  /** Bind an event. `handler` is a closure OR a descriptor (#30); `opts` is
+   *  reserved for passive/once/capture listeners (not yet wired from JSX). */
+  listen(el: BNode, type: string, handler: Handler, opts?: AddEventListenerOptions): void;
   /** Next sibling, for keyed-reconcile move-skipping (DOM only; SSR returns null). */
   nextSibling(node: BNode): BNode | null;
   /** DOM: a persistent reactive effect. SSR: run once, no subscription. */
@@ -101,7 +123,7 @@ function setProp(b: RenderBackend, el: BNode, key: string, value: unknown): void
     return;
   }
   if (key.length > 2 && key[0] === "o" && key[1] === "n") {
-    b.listen(el, key.slice(2).toLowerCase(), value as (e: any) => void);
+    b.listen(el, key.slice(2).toLowerCase(), value as Handler);
     return;
   }
   if (typeof value === "function") {

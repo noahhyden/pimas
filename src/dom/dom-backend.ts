@@ -80,8 +80,12 @@ export const domBackend: RenderBackend = {
   setStyle(el, name, value) {
     (el as HTMLElement).style.setProperty(name, value);
   },
-  listen(el, type, handler) {
-    (el as Element).addEventListener(type, handler);
+  listen(el, type, handler, opts) {
+    // Closure form (#9) OR a descriptor with synchronous load() (#30). The async
+    // (`import()`) descriptor path is future resumability work — not wired yet.
+    const fn = typeof handler === "function" ? handler : handler.load();
+    if (typeof fn !== "function") throw new Error("pimas: async handler descriptor unsupported");
+    (el as Element).addEventListener(type, fn, opts);
   },
   nextSibling(node) {
     return (node as Node).nextSibling;

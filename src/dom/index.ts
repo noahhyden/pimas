@@ -29,4 +29,12 @@ export function render(code: () => Child, container: Element): () => void {
 }
 
 export { h, Fragment } from "./engine.js";
-export type { Child, Props, Component, RenderBackend } from "./engine.js";
+export type {
+  Child,
+  Props,
+  Component,
+  RenderBackend,
+  Handler,
+  HandlerDescriptor,
+  EventHandler,
+} from "./engine.js";

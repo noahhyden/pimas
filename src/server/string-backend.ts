@@ -72,7 +72,11 @@ export const stringBackend: RenderBackend = {
     attrs.set("style", (attrs.get("style") ?? "") + `${name}:${value};`);
   },
   listen() {
-    // no-op: a server render can't bind events.
+    // No-op: a server render can't bind events. RESERVED (#30): for a handler
+    // *descriptor* this is where we'll later emit `on:<type>="<ref>#…"` + a
+    // per-root capture table so a qwikloader-style dispatcher can resume without
+    // re-running components. Left inert now — islands (#29) client-render, so the
+    // browser rebinds via the DOM backend; nothing to serialize yet.
   },
   nextSibling() {
     return null; // SSR runs once; reconcile never takes the move path

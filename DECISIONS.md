@@ -139,10 +139,10 @@ Confirmed gaps vs the field, sequenced cheap-owner-tree-wins-first, compiler-las
 (against a frozen API). None block Phase 4 (the static site needs none), so the
 site port goes first; this cluster is **pre-Klarum** (Klarum apps will need store
 + context):
-1. `createContext`/`useContext` — LOW cost, the owner tree is already the substrate. Highest-leverage cheap win.
+1. `createContext`/`useContext` — LOW cost, the owner tree is already the substrate. Highest-leverage cheap win. **BUILT — see #28.**
 2. `<ErrorBoundary>`/`catchError` — LOW–MED; wrap update/component in try/catch, propagate up the owner tree.
 3. `createStore` (nested reactive proxy) — HIGHEST real-app value (an object in one signal re-runs everything on any field change); pure userland-of-the-kernel, no core change.
-4. `hydrate()` — seam-ready (the `<!---->` anchors are already emitted on both sides); needs a backend mode that *adopts* existing DOM instead of creating it.
+4. `hydrate()` — seam-ready (the `<!---->` anchors are already emitted on both sides); needs a backend mode that *adopts* existing DOM instead of creating it. **Superseded by the islands model (#29–#32): client-render islands first; the CLAIM/hydrate backend is deferred to islands that visibly flash.**
 5. Scheduler seam — microtask flush + parent/child effect ordering; the precondition for any future concurrency/transitions. Current flush is synchronous (simple, debuggable, but no ordering guarantee and forecloses concurrency).
 6. Compiler (thunk-eraser) — Phase 5 anchor; erases the `{() => x()}` tax every comparable framework eventually compiled away. Sequence last, against a stable runtime API.
 
@@ -154,7 +154,8 @@ at the backend `listen` seam) — the opposite of closures. **Not urgent:** ther
 no event-heavy code yet (the static site barely uses handlers), so retrofit cost
 is still low. Recommendation: introduce the handler-identity layer in the `listen`
 contract when we start klarum.com's interactive demos, not before — but track it
-so it's a deliberate decision, not a surprise. **Status: OPEN.**
+so it's a deliberate decision, not a surprise. **Status: RESOLVED by #30** (the
+descriptor-or-closure `listen` seam — the middle path this entry called for).
 
 ### 20. In-browser test suite — Vite dev server + WebBridge (BUILT)
 A real-browser suite to complement the happy-dom unit tests, for cases happy-dom
@@ -245,3 +246,133 @@ resource timing reports zero external hosts. Footer #25 updated from the honest
 "fonts only" to the now-true **0 external requests**. All five pages ported, 0 KB
 JS, 0 external requests. Only the deployment swap remains for Phase 4 (deferred —
 "when we get there").
+
+---
+
+## Phase 5 — interactivity, and the dogfood rung-up to klarum.com (2026-07-01)
+
+Phase 4 shipped noahhyden.com fully on pimas. The next dogfood rung is **klarum.com**
+(repo `Klarum-Software/klarum-landing`) — the intermediate-stakes target from #15.
+An inventory agent mapped it: a **Next.js 16 App Router** site, 19 pages, 83
+components, **71% `"use client"`**, NOT statically exportable. Unlike noahhyden.com
+(content-only, 0 KB JS), it is genuinely interactive: **8 interactive islands, 4 of
+them complex** — a records spreadsheet (inline edit / sort / filter / live totals),
+an SVG knowledge-graph (hover-highlight, click-select, ResizeObserver layout),
+recharts-style analytics (tab-switched bar+line), and a timed "agent playback" state
+machine (setTimeout phase machine) — on an otherwise mostly-static marketing page.
+Heavy deps (Radix ×27, recharts, embla, react-hook-form+zod, next-themes) are mostly
+lightly used. Estimated 5–7 day port. **Implication:** this rung finally forces
+browser interactivity, so it triggers the hydration/islands work (#18.4) and the
+OPEN handler-identity decision (#19). Discipline (#15): port the **home page + ONE
+representative island first** to prove the mechanism end-to-end before porting 83
+components — do not boil the ocean. A parallel research agent (hydration↔resumability
+spectrum, islands-in-plain-esbuild, the `listen`-seam handler-identity design) runs
+alongside per the standing rule; its synthesis will become the seam decisions here.
+
+### 28. `createContext` / `useContext` — BUILT (backlog #18.1)
+The first Phase-5 primitive, and decision-independent of the hydration work (Klarum
+needs it regardless — e.g. a theme provider replacing next-themes). It rides the
+**owner tree** (#10), not the DOM tree, so it survives portals and future
+serialization. Design: a lazily-created `context` map on the reactive node;
+`ctx.Provider` is a `createMemo` — reusing the flow-component pattern (#11), the memo
+is a fresh owner scope whose node carries the value, and children are built *inside*
+it so their owner chain runs through it. `useContext` walks `owner` upward to the
+nearest provider, else returns the default. **Pre-compiler caveat:** Provider children
+must be a THUNK `{() => <App/>}` (same rule as `<Show>`) — eager children would be
+built before the scope exists. Lives in the reactive **core** (headless consumers,
+e.g. the Klarum token engine, will want context too); the only DOM coupling is a
+**type-only** `Child` import for the Provider's JSX return type (erased at build —
+the core ships zero DOM runtime; `flow` imports `Child` the same way). 6 tests
+(DOM + nesting + reactive value + SSR + default). Cost: `core: full surface` 825→963
+gz (budget 1000 — no re-baseline). SSR verified: context resolves under
+`renderToString` too.
+
+### 29. Interactivity model = ISLANDS, client-rendered first (resolves the Phase-5 fork)
+The parallel hydration research (clean-room, grounded in Solid/Astro/Qwik mechanics)
+was decisive: for a mostly-static marketing page with a handful of interactive
+widgets, **islands beat full-page hydration and resumability**. Full-page hydration
+would ship+execute JS for static hero/feature/footer content — violating the 0-KB
+static baseline (#24). Resumability needs a compiler we don't have and taxes all
+authoring; wrong time. So: the static shell stays **0 KB JS**; each interactive
+island ships its **own tree-shaken bundle**, lazy-loaded by strategy
+(`load`/`idle`/`visible` via `requestIdleCallback`/`IntersectionObserver`), mirroring
+Astro's `client:*` + `<astro-island>`. **Client-render each island first** (run the
+component fresh on the DOM backend in create-mode, replace the server HTML) rather
+than truly hydrating it — this removes the entire hydration-mismatch failure class
+(Solid Start's #1 pain) from the critical path. 7 of klarum's 8 islands are
+below-the-fold/interaction-gated, so no flash. The true CLAIM/hydrate backend (#31)
+is built later, only for an island that visibly flashes (realistically just the
+parallax hero). Direct `addEventListener` closures (#9) stay correct for these
+islands — just routed through the descriptor-capable `listen` seam (#30).
+
+### 30. `listen` seam takes a handler DESCRIPTOR or a bare function — RESOLVES #19
+The one expensive-to-retrofit decision, so locked now even though only half is built.
+The `RenderBackend.listen` contract becomes:
+`listen(el, type, handler, opts?)` where `handler` is EITHER a live closure (today's
+path, wired via `addEventListener`) OR a descriptor `{ ref: string; load: () =>
+fn | Promise<fn>; capture?: unknown[] }`. **Build now:** only the closure path +
+descriptor-with-synchronous-`load` (zero behavior change for existing code).
+**Reserved now, built later:** the string backend may emit a serialized
+`on:<type>="<ref>#…"` attribute + a per-root capture table for descriptors; a future
+compiler rewrites bare closures into descriptors and `load` into a real dynamic
+`import()`, and a qwikloader-style global dispatcher reads the attributes — **all
+additive, no seam change**. This is the middle path #19 asked for: closures keep
+working for islands NOW without foreclosing resumability LATER. If we hardcoded
+"handler is always a function," resumability would be a rewrite — hence lock now.
+
+### 31. Deterministic create-order + `<!---->` anchor invariant is LOCKED
+A fine-grained renderer has no rebuilt tree to diff against on hydration — it must
+hand each reactive leaf the *exact* server node it owns, in one forward pass. That
+requires (a) DOM and string backends walk children in identical order, and (b)
+self-delimiting boundary markers so a claim-walker can parse the DOM as a token
+stream (`getNextElement`/`getNextMarker`). We ALREADY emit `<!---->` anchors around
+dynamic sections (#6/#24 seam) — this decision just *locks* that invariant as load-
+bearing and forbids silently changing child-visit order. The CLAIM backend mode
+itself (reinterpret `element`/`text`/`anchor`/`insert`/`effect` to adopt existing
+nodes instead of creating them; run `effect` once-then-live) is **deferred** to when
+an island needs true hydration — the anchors make it purely additive when we get there.
+
+### 32. Islands build in the plain-esbuild pipeline (no Vite/Next) + type-tagged props
+Consistent with #23. Mechanism: an `<Island src="..." client="visible" props={...}/>`
+marker; a two-pass build — SSR pass renders the static HTML and registers each
+island `{src, export, client, props}` (island server HTML produced here too), then a
+client pass runs `esbuild.build({ entryPoints:[src], splitting:true, format:'esm',
+bundle:true })` per distinct island so the shared runtime (signals + DOM renderer +
+loader) is factored into ONE shared chunk (our per-import byte budgets make it cheap).
+Each island is emitted as an `<is-land>` wrapper containing its server HTML +
+`data-src`/`data-export`/`data-client`/`data-props`. Props use a **type-tagged JSON
+encoder** (Dates/Maps/typed rows round-trip) — built once, reused later for the
+resumable capture table (#30). A few-hundred-byte inline loader walks `<is-land>`s
+and mounts by strategy. Locked now: the `<is-land>` wire conventions + the reserved
+`on:*`/capture format. **Sandbox discipline (#15):** prove the whole islands pipeline
+end-to-end on noahhyden.com (the break-freely sandbox) with one simple island BEFORE
+applying it to klarum's 83 components.
+
+### 33. Islands pipeline BUILT + browser-proven on the sandbox (#29/#30/#32 realized)
+Built end-to-end on noahhyden.com and verified in a real browser (WebBridge):
+- **`listen` descriptor seam (#30)** shipped in the engine + both backends; 4 tests
+  (closure, sync descriptor, capture-bag carried, async-descriptor throws). Conscious
+  size re-baseline: `dom` 1800→1850 gz (justified — the resumability lock).
+- **Site islands mechanism (#32):** `<Island slug component client/>` marker renders
+  the component INLINE at SSR wrapped in `<is-land data-island/data-client/data-props>`;
+  `build.mjs` runs a second esbuild pass (`splitting:true`, pimas BUNDLED not external,
+  `minify`) over `[boot, …islands]` → `dist/islands/`. `splitting` factored the pimas
+  kernel into ONE shared chunk imported by both `boot.js` and `accordion.js` — verified
+  single kernel (same `chunk-*.js` import), so NO dual-kernel (#26) in the browser.
+- **`boot.ts`** (the only client entry) walks `<is-land>`s, schedules by `data-client`
+  (`load`/`idle`/`visible` via IntersectionObserver/requestIdleCallback), dynamic-imports
+  the island bundle, and **client-renders** it (drops server HTML, `render()`s the live
+  component) — #29's client-render-first, no claim/hydrate.
+- **First island:** a 3-panel accordion on the design-language page, `client="visible"`.
+  Browser proof: SSR shipped 3 real `<button>`s of static HTML; scrolling mounted it
+  (IntersectionObserver); clicks toggled panels one-open-at-a-time via one signal
+  (`[220px,0,0]`→`[0,220px,0]`→`[0,0,0]`); **zero console/window errors**.
+- **Honest metrics held:** 4 static pages ship **0 KB JS**; design-language ships
+  exactly **4.0 KB gz** (boot 376 B + accordion 1.7 KB + shared kernel 2.1 KB), reported
+  truthfully in its footer ("static shell + one 4.0 KB island"). The 0-KB baseline (#24)
+  is preserved everywhere JS isn't needed. **NOT yet deployed** to the live root (deploy
+  is the copy-dist-to-root step, done on request). Deferred as planned: type-tagged prop
+  serializer (plain JSON suffices until an island needs Dates/Maps — klarum's spreadsheet),
+  the claim/hydrate backend, per-island byte attribution (sum-of-all-islands is exact at
+  N=1), content-hashed island filenames. Next: `createStore` (#18.3) for klarum's stateful
+  islands, then apply the pipeline to klarum's home page + first real island.
