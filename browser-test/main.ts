@@ -9,5 +9,7 @@ import "./tests/svg.test";
 import "./tests/focus-reorder.test";
 import "./tests/events.test";
 import "./tests/inputs.test";
+import "./tests/on-mount.test";
+import "./tests/error-boundary.test";
 
 run();
