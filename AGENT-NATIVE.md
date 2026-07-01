@@ -95,16 +95,23 @@ Mitigation, not elimination: copy-on-write for the store in speculation mode,
 forbid/no-op effects during a speculation, and warn on writes that escape the
 shadow. Design around it; don't pretend it's solved.
 
-## Staged plan
+## Staged plan — status (live tracker: issue #13)
 
-- **Spike 0 — L1 (near-free).** Agent-side subscription bridge over existing
-  signals/store; prove push-on-change with zero core changes. *(Buildability: easy.)*
-- **Spike 1 — L3 signals-only (long weekend).** A `speculate(writes, readback)`
-  that shadow-evaluates pure memos without flushing effects, signals only (skip the
-  store). Prove the oracle is real and exact. *(Buildability: hard, not blocked.)*
-- **Then:** store copy-on-write (the real work in L3) and L2 provenance
-  instrumentation (names + action-tagging + a change log — all additive, no
-  algorithm change).
+- ✅ **L1** — `pimas/agent` `createAgentBridge` (expose/subscribe/call, push-on-change, zero core change).
+- ✅ **L3** — `speculate(apply, read)` in the core (shadow read/write, effects don't fire, free
+  rollback), **plus store copy-on-write** (`speculationScratch` on the core) so hypothetical
+  *edits* work. Hot-path floor 679→698 gz; heavy logic tree-shakes.
+- ✅ **L2** — `pimas/store` `onStoreWrite` + a bridge `CauseRecord` (`explain()` / `cause` event).
+- ✅ **WebMCP** — `pimas/agent/webmcp` `toWebMCP(bridge)` (actions→tools, state→`get_*` tools,
+  `document.modelContext`, AbortSignal teardown, MCP content envelope).
+- ✅ **Validated** — 101 vitest green; the klarum showcase model; and end-to-end on a **real HTTP
+  stack** (pivi `/api/proposals`): a browser **preview → approve → commit** copilot
+  (`Klarum-Software/pivi` worktree `spike/pimas-agent-records`, `agent-native/`) — `speculate`
+  previews the exact totals, approve fires a real `PATCH`, the backend persists.
+- **Open forks** (need a human call): a React adapter for pivi's real Next frontend; wiring the
+  real Neon-backed gateway (needs creds — pivi's gateway can't boot from scratch: prod-cutover
+  Alembic + `proposals` is raw-SQL/migration-only); P0 hardening of `pimas/agent` (error
+  isolation, async actions, delta coalescing).
 
 ## What this reframe changes about the roadmap
 

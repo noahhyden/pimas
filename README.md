@@ -19,6 +19,8 @@ tree-shaken away (every entry is pure ESM + `"sideEffects": false`).
 | `pimas/server` | `renderToString` — same components, rendered to HTML (SSR / static prerender). | the core |
 | `pimas/flow` | control flow — `<Show>`/`<Switch>`/`<Match>`, keyed `<For>`, position-keyed `<Index>`. | the core |
 | `pimas/store` | `createStore` — nested reactive proxy (fine-grained per-field). **Headless.** | the core |
+| `pimas/agent` | 🔬 **experimental** — expose the reactive graph to an AI agent: subscribe to live state (L1), causal provenance (L2), deterministic what-if `speculate` (L3). **Headless.** | the core |
+| `pimas/agent/webmcp` | 🔬 **experimental** — project a bridge onto the WebMCP browser API (`document.modelContext` tools). | `pimas/agent` |
 | `pimas/jsx-runtime`, `pimas/jsx-dev-runtime` | automatic JSX runtime for TS's `react-jsx` transform | the renderer |
 
 The renderer is parameterized over a small `RenderBackend` contract, so `pimas/dom`
@@ -73,9 +75,10 @@ render(() => <Counter />, document.body); // only the text node updates on click
 | **3b — Control flow** | `<Show>`/`<Switch>`/`<Match>`, keyed `<For>`, position-keyed `<Index>`, per-row owner scopes | ✅ done |
 | **4 — Port noahhyden.com** | rebuilt every page, static HTML via `pimas/server`, 0 KB JS, self-hosted fonts — **deployed live**, the canvas runtime is gone | ✅ done |
 | **5 — Interactivity + Klarum** | `createContext`, `createStore`, `onMount`, `<ErrorBoundary>`/`catchError`, descriptor-capable `listen` seam, **islands** (client-rendered, lazy) — and klarum.com rebuilt on pimas | ✅ done |
+| **6 — Agent-native** | expose the reactive graph to an AI agent — subscribe (L1), causal provenance (L2), deterministic what-if `speculate` (L3), WebMCP projection; proven on a real HTTP stack | 🔬 exploration |
 
 Real-browser tests live in `browser-test/` (`npm run test:browser`, drives a real Chrome;
-84 vitest + 15 browser tests green). Architecture rationale for every choice is in
+101 vitest + 15 browser tests green). Architecture rationale for every choice is in
 [`DECISIONS.md`](DECISIONS.md); the phase tracker is [issue #1](../../issues/1).
 
 ### Phase 5
@@ -99,6 +102,33 @@ Real-browser tests live in `browser-test/` (`npm run test:browser`, drives a rea
 - **Deferred to a later phase** (tracked in issues): a microtask scheduler, the compiler
   (thunk-eraser), store `produce`/`reconcile`, the claim/hydrate backend, resumability, and a
   dev-mode `<Show>`/thunk-staleness warning.
+
+### Agent-native (exploration — issue [#13](../../issues/13), rationale in [`AGENT-NATIVE.md`](AGENT-NATIVE.md))
+
+A from-scratch fine-grained engine is, incidentally, a live machine-readable model of the
+page — signals are readable/subscribable state, setters/handlers are actions, memos are
+derivations. A virtual DOM is not. `pimas/agent` turns that into an agent-facing surface:
+
+- **L1 — subscribe.** `createAgentBridge` exposes signals/memos as named live values an agent
+  is *pushed* deltas for (an exposing `createEffect` **is** the subscription) and registers
+  actions it can `call`. No polling, no DOM scraping.
+- **L2 — explain.** Each `call()` records a causal record — which fields it wrote (via
+  `pimas/store`'s `onStoreWrite`) and which exposed values changed — read via `explain()`.
+- **L3 — simulate.** `speculate(apply, read)` evaluates hypothetical writes against a *shadow*
+  of the graph: reads/memos see the what-if, the real graph and effects are untouched, rollback
+  is free — so an agent gets the **exact predicted next state before committing**. Only tractable
+  because the engine is pull-based with topology separate from value; store copy-on-write covers
+  edits. Distinct from learned agent world-models (approximate) and optimistic updates (commit-
+  then-rollback).
+- **WebMCP.** `pimas/agent/webmcp` `toWebMCP(bridge)` projects actions → tools and state →
+  read-only `get_*` tools onto the browser `document.modelContext` standard; the bridge's live
+  subscribe channel is the push WebMCP structurally lacks — the differentiator.
+
+Proven end-to-end driving a real HTTP stack (pivi's `/api/proposals` contract): a **preview →
+approve → commit** copilot where `speculate` shows the exact resulting totals, *approve* fires a
+real `PATCH`, and the backend persists it. Exploration, not a committed pivot — the core
+(Phases 1–5) is unchanged and the whole agent layer is opt-in (tree-shaken when unused; the
+hot-path floor moved only 679→698 gz).
 
 ## Develop
 
