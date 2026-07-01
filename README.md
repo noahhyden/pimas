@@ -14,10 +14,11 @@ tree-shaken away (every entry is pure ESM + `"sideEffects": false`).
 
 | Import | What | Pulls in |
 | --- | --- | --- |
-| `pimas` | reactive core — signals/effects/memos. **Headless** (browser *or* Node). | nothing else |
+| `pimas` | reactive core — signals/effects/memos, `createContext`/`useContext`. **Headless** (browser *or* Node). | nothing else |
 | `pimas/dom` | DOM renderer + `render`/`h`/`Fragment`. | the core |
 | `pimas/server` | `renderToString` — same components, rendered to HTML (SSR / static prerender). | the core |
 | `pimas/flow` | control flow — `<Show>`/`<Switch>`/`<Match>`, keyed `<For>`, position-keyed `<Index>`. | the core |
+| `pimas/store` | `createStore` — nested reactive proxy (fine-grained per-field). **Headless.** | the core |
 | `pimas/jsx-runtime`, `pimas/jsx-dev-runtime` | automatic JSX runtime for TS's `react-jsx` transform | the renderer |
 
 The renderer is parameterized over a small `RenderBackend` contract, so `pimas/dom`
@@ -70,8 +71,25 @@ render(() => <Counter />, document.body); // only the text node updates on click
 | **2 — DOM renderer + JSX** | `h`/`Fragment`/`render`, dynamic attrs & children via effects, automatic JSX runtime | ✅ done |
 | **3 — Backend seam + SVG** | renderer over a `RenderBackend` contract, SVG `createElementNS`, `pimas/server` `renderToString` | ✅ done |
 | **3b — Control flow** | `<Show>`/`<Switch>`/`<Match>`, keyed `<For>`, position-keyed `<Index>`, per-row owner scopes | ✅ done |
-| 4 — Port noahhyden.com | rebuild pages, ship static HTML via `pimas/server`, delete the canvas runtime | — |
-| 5 — Optional | router, SSR/hydrate, compiler plugin, devtools | — |
+| **4 — Port noahhyden.com** | rebuilt every page, static HTML via `pimas/server`, 0 KB JS, self-hosted fonts — **deployed live**, the canvas runtime is gone | ✅ done |
+| **5 — Interactivity + Klarum** | `createContext`, `createStore`, descriptor-capable `listen` seam, **islands** (client-rendered, lazy), Klarum home ported | 🚧 in progress |
+
+Real-browser tests live in `browser-test/` (`npm run test:browser`, drives a real Chrome).
+Architecture rationale for every choice is in [`DECISIONS.md`](DECISIONS.md); the phase
+tracker is [issue #1](../../issues/1).
+
+### Phase 5 so far
+
+- **`createContext` / `useContext`** — rides the owner tree (survives portals/serialization).
+- **`createStore`** — nested reactive proxy: reading `state.rows[3].status` in an effect re-runs
+  only when *that* field changes. Fine-grained down to the property.
+- **Islands** — interactive widgets ship as their own lazy-loaded, code-split bundles
+  (`load`/`idle`/`visible`); the rest of the page stays 0 KB JS and is client-rendered on demand.
+  Proven on noahhyden.com (an accordion) and Klarum (an FAQ).
+- **`listen` seam** takes a closure *or* a serializable handler descriptor `{ref, load, capture}`
+  — the door to Qwik-style resumability is held open without paying for it yet.
+- **Deferred** (tracked in issues): `ErrorBoundary`, a microtask scheduler, the compiler
+  (thunk-eraser), store `produce`/`reconcile`, the claim/hydrate backend, resumability.
 
 ## Develop
 
