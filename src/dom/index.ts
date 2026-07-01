@@ -28,7 +28,7 @@ export function render(code: () => Child, container: Element): () => void {
   };
 }
 
-export { h, Fragment } from "./engine.js";
+export { h, Fragment, onMount } from "./engine.js";
 export type {
   Child,
   Props,

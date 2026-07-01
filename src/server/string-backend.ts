@@ -84,6 +84,9 @@ export const stringBackend: RenderBackend = {
   effect(run) {
     untrack(run); // run once, no subscription
   },
+  scheduleMount() {
+    // no-op on the server: run-once render, no live nodes to act on
+  },
 };
 
 export function serialize(node: SNode): string {

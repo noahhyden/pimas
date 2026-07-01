@@ -36,10 +36,13 @@ const alias = {
 // DESCRIPTOR (not only a bare closure) so resumability stays additive later —
 // a deliberate foundational capability. Cost is in the DOM backend's listen:
 // dom 1790→1850 gz. Conscious bump, not bloat.
+// Re-baselined in Phase 5 (#37): `onMount` (post-insert lifecycle hook) added at
+// the backend seam — DOM defers via microtask, SSR no-ops. Foundational for any
+// component touching a live node (focus/measure). dom 1850→1875 gz.
 const fixtures = {
   "core: signal only": [`import { createSignal } from "pimas"; createSignal(0);`, 700],
   "core: full surface": [`import * as R from "pimas"; globalThis.x = R;`, 1000],
-  "dom: render + h": [`import { render, h } from "pimas/dom"; globalThis.x = [render, h];`, 1850],
+  "dom: render + h": [`import { render, h } from "pimas/dom"; globalThis.x = [render, h];`, 1875],
   "server: renderToString": [`import { renderToString } from "pimas/server"; globalThis.x = renderToString;`, 1350],
   "flow: Show + Switch": [`import { Show, Switch, Match } from "pimas/flow"; globalThis.x = [Show, Switch, Match];`, 900],
   "flow: For (keyed)": [`import { For } from "pimas/flow"; globalThis.x = For;`, 1350],

@@ -56,6 +56,10 @@ export interface RenderBackend {
   nextSibling(node: BNode): BNode | null;
   /** DOM: a persistent reactive effect. SSR: run once, no subscription. */
   effect(run: () => void): void;
+  /** Run `fn` once AFTER this render's nodes are inserted. DOM: defers to a
+   *  microtask (binding effects run during construction, before insertion, so a
+   *  plain effect sees detached nodes). SSR: no-op — run-once, no live nodes. */
+  scheduleMount(fn: () => void): void;
 }
 
 export type Child =
@@ -89,6 +93,22 @@ function activeBackend(): RenderBackend {
     throw new Error("pimas: no active render backend — call render() or renderToString().");
   }
   return currentBackend;
+}
+
+/**
+ * Run `fn` once after the current render's nodes are inserted into the live tree.
+ * Effects run during construction — before insertion — so a `ref` or effect sees
+ * a DETACHED node; `onMount` is the hook for anything needing the node in the DOM
+ * (focus, measure, scroll-into-view, wiring a non-declarative library). Pair with
+ * a `ref` to capture the element:
+ *
+ *   let el; onMount(() => el.focus()); return <input ref={(n) => (el = n)} />;
+ *
+ * No-op under SSR (the string backend renders once with no live nodes). For
+ * teardown, register `onCleanup` at setup time — not inside `onMount`.
+ */
+export function onMount(fn: () => void): void {
+  activeBackend().scheduleMount(fn);
 }
 
 /** Hyperscript / JSX factory. Reads the active backend and builds through it. */

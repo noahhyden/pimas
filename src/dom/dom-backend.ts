@@ -93,4 +93,8 @@ export const domBackend: RenderBackend = {
   effect(run) {
     createEffect(run);
   },
+  scheduleMount(fn) {
+    // Defer past the synchronous build+insert so the node is live when fn runs.
+    queueMicrotask(fn);
+  },
 };
