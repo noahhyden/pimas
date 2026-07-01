@@ -44,15 +44,22 @@ const alias = {
 // indivisible kernel, so every fixture pulling the core pays (~+86 gz each):
 // signal 700→725, full surface 1000→1125, dom 1875→1950, store 1400→1475 gz.
 // Deliberate, not bloat.
+// Re-baselined for L3 `speculate` (#13, the agent-simulatable-frontend pivot):
+// readNode/writeNode gain a single `if (speculating)` branch — the heavy shadow
+// logic lives inside `speculate` itself, so it TREE-SHAKES away for anyone who
+// doesn't import it. The hot-path floor barely moves (signal 679→698, well
+// under budget); the cost lands only where L3 is actually pulled in —
+// full surface 1125→1325 (includes `speculate`), store 1475→1575 (the write
+// guard + `isSpeculating`), For 1350→1375 (the core branch). Opt-in, not bloat.
 const fixtures = {
   "core: signal only": [`import { createSignal } from "pimas"; createSignal(0);`, 725],
-  "core: full surface": [`import * as R from "pimas"; globalThis.x = R;`, 1125],
+  "core: full surface": [`import * as R from "pimas"; globalThis.x = R;`, 1325],
   "dom: render + h": [`import { render, h } from "pimas/dom"; globalThis.x = [render, h];`, 1950],
   "server: renderToString": [`import { renderToString } from "pimas/server"; globalThis.x = renderToString;`, 1350],
   "flow: Show + Switch": [`import { Show, Switch, Match } from "pimas/flow"; globalThis.x = [Show, Switch, Match];`, 900],
-  "flow: For (keyed)": [`import { For } from "pimas/flow"; globalThis.x = For;`, 1350],
+  "flow: For (keyed)": [`import { For } from "pimas/flow"; globalThis.x = For;`, 1375],
   "flow: ErrorBoundary": [`import { ErrorBoundary } from "pimas/flow"; globalThis.x = ErrorBoundary;`, 1000],
-  "store: createStore": [`import { createStore } from "pimas/store"; globalThis.x = createStore;`, 1475],
+  "store: createStore": [`import { createStore } from "pimas/store"; globalThis.x = createStore;`, 1575],
 };
 
 let failed = false;

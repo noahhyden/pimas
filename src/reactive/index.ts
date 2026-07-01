@@ -11,6 +11,8 @@ export {
   createMemo,
   batch,
   untrack,
+  speculate,
+  isSpeculating,
   getListener,
   onCleanup,
   createRoot,

@@ -18,7 +18,7 @@
  * Deferred to v2 (not needed yet): `produce` (mutable draft) and `reconcile`
  * (diff external data in, preserving identity). See DECISIONS.
  */
-import { createSignal, batch, getListener } from "../reactive/index.js";
+import { createSignal, batch, getListener, isSpeculating } from "../reactive/index.js";
 
 const $RAW = Symbol("pimas.store.raw");
 const $NODES = Symbol("pimas.store.nodes");
@@ -190,6 +190,11 @@ export function createStore<T extends object>(init: T): [Store<T>, SetStoreFunct
   const raw = unwrap(init);
   const proxy = wrap(raw);
   const setStore = (...args: unknown[]): void => {
+    // A store write mutates the RAW object directly, so it can't ride the L3
+    // shadow (#13) — reject it until copy-on-write lands. Reads during
+    // speculation are fine (they return the real committed data).
+    if (isSpeculating())
+      throw new Error("pimas store: writes inside speculate() aren't supported yet (copy-on-write is a later layer)");
     batch(() => updatePath(raw as Record<PropertyKey, unknown>, args));
   };
   return [proxy, setStore as SetStoreFunction<T>];

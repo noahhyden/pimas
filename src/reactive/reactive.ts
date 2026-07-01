@@ -65,6 +65,12 @@ let batchDepth = 0;
 /** Effects marked dirty/check, awaiting a flush. */
 const effectQueue: Reactive[] = [];
 let flushing = false;
+/** Non-null while a `speculate(...)` what-if evaluation is in progress (L3, #13).
+ *  Reads/writes route through its methods; the heavy shadow logic lives in
+ *  `speculate` (tree-shaken away for anyone who never imports it) so the core's
+ *  hot read/write path pays only a single null-check. The real graph is never
+ *  touched during speculation. */
+let speculating: { read<T>(n: Reactive<T>): T; write<T>(n: Reactive<T>, v: T): T } | null = null;
 
 const defaultEquals = <T>(a: T, b: T) => Object.is(a, b);
 
@@ -87,6 +93,7 @@ function makeNode<T>(fn: (() => T) | undefined, value: T | undefined, effect: bo
 // ── Read / write ───────────────────────────────────────────────────────────
 
 function readNode<T>(node: Reactive<T>): T {
+  if (speculating) return speculating.read(node); // L3: shadow read, real graph untouched
   // Subscribe the running computation (two-way link).
   if (currentObserver) {
     currentObserver.sources.add(node);
@@ -98,6 +105,7 @@ function readNode<T>(node: Reactive<T>): T {
 }
 
 function writeNode<T>(node: Reactive<T>, next: T): T {
+  if (speculating) return speculating.write(node, next); // L3: shadow write
   if (node.equals(node.value as T, next)) return node.value as T; // no-op on equal
   node.value = next;
   // PUSH: mark direct dependents DIRTY (transitive ones become CHECK).
@@ -253,6 +261,68 @@ export function batch<T>(fn: () => T): T {
  */
 export function getListener(): unknown {
   return currentObserver;
+}
+
+/** True while a `speculate(...)` what-if evaluation is in progress (L3, #13). */
+export function isSpeculating(): boolean {
+  return speculating !== null;
+}
+
+/**
+ * L3 what-if oracle (issue #13). Apply hypothetical writes in `apply`, then
+ * evaluate `read` — both against a SHADOW of the reactive graph. Reads see the
+ * hypothetical values and memos recompute against them, but the real graph is
+ * never mutated and NO effects fire; the whole thing rolls back on exit (drop
+ * the shadow map). Returns `read`'s result.
+ *
+ * Lets an agent ask "what would the UI become if I did X?" and get an EXACT
+ * answer computed from the app's own derived logic — before committing anything.
+ * Correct for pure derived memos/signals. Store writes throw (they'd mutate
+ * committed state; copy-on-write is a later layer). No nesting yet.
+ */
+export function speculate<T>(apply: () => void, read: () => T): T {
+  if (speculating) throw new Error("speculate: no nested speculation yet");
+  const values = new Map<Reactive, unknown>();
+  // A shadow read: hypothetical value if one was written; else for a memo,
+  // recompute against the shadow — fully detached (no subscription, no
+  // ownership) so nothing real is mutated — and memoize (diamonds compute once);
+  // else a plain signal's real committed value. Correct for pure memos.
+  const spec = {
+    read<U>(node: Reactive<U>): U {
+      if (values.has(node)) return values.get(node) as U;
+      if (node.fn && !node.effect) {
+        const po = currentObserver, pw = currentOwner;
+        currentObserver = null;
+        currentOwner = null;
+        try {
+          const v = node.fn();
+          values.set(node, v);
+          return v;
+        } finally {
+          currentObserver = po;
+          currentOwner = pw;
+        }
+      }
+      return node.value as U;
+    },
+    write<U>(node: Reactive<U>, next: U): U {
+      values.set(node, next);
+      return next;
+    },
+  };
+  const prevObserver = currentObserver;
+  const prevOwner = currentOwner;
+  currentObserver = null; // hypothetical writes/reads must not subscribe anything real
+  currentOwner = null;
+  speculating = spec;
+  try {
+    apply();
+    return read();
+  } finally {
+    speculating = null;
+    currentObserver = prevObserver;
+    currentOwner = prevOwner;
+  }
 }
 
 /** Read signals inside `fn` without subscribing the current computation. */
