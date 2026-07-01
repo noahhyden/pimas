@@ -39,14 +39,20 @@ const alias = {
 // Re-baselined in Phase 5 (#37): `onMount` (post-insert lifecycle hook) added at
 // the backend seam — DOM defers via microtask, SSR no-ops. Foundational for any
 // component touching a live node (focus/measure). dom 1850→1875 gz.
+// Re-baselined in Phase 5 (#38): ErrorBoundary/catchError — foundational error
+// handling. The `handleError` walk + the catch in `update()` land in the
+// indivisible kernel, so every fixture pulling the core pays (~+86 gz each):
+// signal 700→725, full surface 1000→1125, dom 1875→1950, store 1400→1475 gz.
+// Deliberate, not bloat.
 const fixtures = {
-  "core: signal only": [`import { createSignal } from "pimas"; createSignal(0);`, 700],
-  "core: full surface": [`import * as R from "pimas"; globalThis.x = R;`, 1000],
-  "dom: render + h": [`import { render, h } from "pimas/dom"; globalThis.x = [render, h];`, 1875],
+  "core: signal only": [`import { createSignal } from "pimas"; createSignal(0);`, 725],
+  "core: full surface": [`import * as R from "pimas"; globalThis.x = R;`, 1125],
+  "dom: render + h": [`import { render, h } from "pimas/dom"; globalThis.x = [render, h];`, 1950],
   "server: renderToString": [`import { renderToString } from "pimas/server"; globalThis.x = renderToString;`, 1350],
   "flow: Show + Switch": [`import { Show, Switch, Match } from "pimas/flow"; globalThis.x = [Show, Switch, Match];`, 900],
   "flow: For (keyed)": [`import { For } from "pimas/flow"; globalThis.x = For;`, 1350],
-  "store: createStore": [`import { createStore } from "pimas/store"; globalThis.x = createStore;`, 1400],
+  "flow: ErrorBoundary": [`import { ErrorBoundary } from "pimas/flow"; globalThis.x = ErrorBoundary;`, 1000],
+  "store: createStore": [`import { createStore } from "pimas/store"; globalThis.x = createStore;`, 1475],
 };
 
 let failed = false;

@@ -49,6 +49,9 @@ interface Reactive<T = any> {
   /** Context values provided at this scope, keyed by context id. Lazily created
    *  — only `<Provider>` nodes carry one, so plain signals/effects pay nothing. */
   context?: Record<symbol, unknown>;
+  /** Error handler installed at this scope (a boundary). Walked up the owner
+   *  chain like `context`; lazily created — only boundary nodes carry one. */
+  errorHandler?: (err: unknown) => void;
 }
 
 // ── Globals ──────────────────────────────────────────────────────────────
@@ -144,6 +147,9 @@ function update<T>(node: Reactive<T>): void {
       node.value = next;
       for (const o of node.observers) o.state = DIRTY; // real change → dependents dirty
     }
+  } catch (err) {
+    node.state = CLEAN; // don't retry a thrower
+    handleError(err, node);
   } finally {
     currentObserver = prevObserver;
     currentOwner = prevOwner;
@@ -278,6 +284,42 @@ export function createRoot<T>(fn: (dispose: () => void) => T): T {
   } finally {
     currentOwner = prevOwner;
   }
+}
+
+// ── Error handling ─────────────────────────────────────────────────────────
+
+/** Route `err` to the nearest enclosing boundary above `from`. Rethrows if none. */
+function handleError(err: unknown, from: Reactive | null): void {
+  for (let node = from; node; node = node.owner) {
+    const h = node.errorHandler;
+    if (h) {
+      const prevOwner = currentOwner, prevObs = currentObserver;
+      currentOwner = node.owner;   // run handler at the boundary's PARENT scope,
+      currentObserver = null;      // so a rethrow escapes to the NEXT boundary up
+      try { h(err); }
+      catch (e) { handleError(e, node.owner); }
+      finally { currentOwner = prevOwner; currentObserver = prevObs; }
+      return;
+    }
+  }
+  throw err;
+}
+
+/**
+ * Run `tryFn` in a scope carrying `handler`. Any error thrown synchronously by
+ * `tryFn`, or later by an effect/memo created inside it, routes to `handler`.
+ * If `handler` rethrows, the error propagates to the next enclosing boundary.
+ */
+export function catchError<T>(tryFn: () => T, handler: (err: unknown) => void): T | undefined {
+  const scope = makeNode<void>(undefined, undefined, false);
+  scope.errorHandler = handler;
+  if (currentOwner) currentOwner.owned.push(scope);
+  const prevOwner = currentOwner;
+  currentOwner = scope;
+  try { return tryFn(); }
+  catch (err) { handleError(err, scope); }
+  finally { currentOwner = prevOwner; }
+  return undefined;
 }
 
 // ── Context ──────────────────────────────────────────────────────────────────

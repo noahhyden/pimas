@@ -20,6 +20,7 @@ import {
   createRoot,
   onCleanup,
   untrack,
+  catchError,
   type Accessor,
 } from "../reactive/index.js";
 import type { Child } from "../dom/engine.js";
@@ -49,6 +50,48 @@ export function Show(props: {
   return createMemo<Child>(() =>
     condition() ? evalMaybe(props.children as Maybe<Child>) : evalMaybe(props.fallback as Maybe<Child>),
   );
+}
+
+/**
+ * Catch errors thrown while building or updating `children` and render `fallback`
+ * instead. `fallback` may be a static child or a function `(err, reset) => Child`;
+ * calling `reset()` clears the error and rebuilds `children` fresh.
+ *
+ * Like `<Show>`, children must be a THUNK — `<ErrorBoundary fallback={...}>{() =>
+ * <App/>}</ErrorBoundary>` — because eager children would be built before the
+ * boundary's owner scope exists, so their throws wouldn't be caught here.
+ */
+export function ErrorBoundary(props: {
+  fallback: Child | ((err: unknown, reset: () => void) => Child);
+  children: Child;
+}): Accessor<Child> {
+  const [errored, setErrored] = createSignal<unknown>(undefined);
+  const reset = () => setErrored(undefined);
+  const renderFallback = (e: unknown): Child => {
+    const f = props.fallback;
+    return typeof f === "function" && (f as Function).length >= 1
+      ? untrack(() => (f as (err: unknown, reset: () => void) => Child)(e, reset))
+      : (f as Child);
+  };
+  return createMemo<Child>(() => {
+    const e = errored();
+    if (e !== undefined) return renderFallback(e);
+    // Catch synchronously. The handler both records the error into `errored`
+    // (so `reset()` is reactive) and captures it locally — because the signal
+    // write happens DURING this memo's own compute and would otherwise be
+    // clobbered when the pull marks us CLEAN, so we render the fallback inline
+    // in the SAME pass rather than waiting for a re-run that never comes.
+    let thrown: { err: unknown } | undefined;
+    const built = catchError(
+      () => (typeof props.children === "function" ? (props.children as () => Child)() : props.children),
+      (err) => {
+        const norm = err === undefined ? new Error("undefined thrown") : err;
+        thrown = { err: norm };
+        setErrored(norm);
+      },
+    );
+    return thrown ? renderFallback(thrown.err) : built;
+  });
 }
 
 export interface MatchProps {

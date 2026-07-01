@@ -16,6 +16,7 @@ export {
   createRoot,
   createContext,
   useContext,
+  catchError,
 } from "./reactive.js";
 
 export type { Accessor, Setter, Signal, Owner, Context } from "./reactive.js";
