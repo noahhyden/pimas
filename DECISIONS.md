@@ -441,3 +441,42 @@ parallax HeroCover, and the other 18 pages.
   runs the Next app; this is a local port milestone (`site/` source; `dist/` gitignored). Next:
   port the demo sections (needs the `.pivi-skin` CSS + complex islands built on `createStore`:
   records grid, agent playback), then the remaining pages.
+
+### 36. Records ledger island — `createStore` proven in a real complex UI (milestone 2)
+The klarum home's Demo section, upgraded from the original static preview to the **genuine
+interactive Records (EOI ledger)** — the first island built on `pimas/store`. Ported from the
+Next app's `components/demo/records-demo.tsx` (which lives on the unmerged `fix/demos-real-pivi-
+design` branch, NOT on `main`/the live site — so this ports an as-yet-unshipped product demo; a
+faithful proof, not a live-parity port). 18-row bid ledger with sortable columns, status filter
+chips (live counts), search, and **inline status + bid-value editing** — a real spreadsheet.
+- **State split that makes fine-grained pay off:** the row collection is one `createStore({rows})`
+  (the single source of truth); view state (`filter`/`query`/`sortKey`/`sortDir`, edit cursors) is
+  plain signals; `visible`/`totalValue`/`filterCounts` are `createMemo`s over both. An inline edit
+  is `setRows("rows", i, "field", v)` — the store pings only that field, so only the one cell
+  binding (a thunk) re-renders, plus whichever memos actually read that field. Editing a bid value
+  while NOT sorted by value updates just that cell + the totals footer, no re-sort — observed.
+- **`createStore` × `<For>` confirmed end-to-end:** the `visible` memo reads `state.rows` (via
+  `.filter`/`.sort`/`.reduce`/`for..of`, all of which route length + index + field reads through
+  the store traps → correct subscription), returns row **proxies** (stable identity via the proxy
+  cache), and `<For each={visible}>` keys by that identity — a re-sort MOVES existing `<tr>` nodes,
+  doesn't rebuild. `.filter()` returns a fresh plain array so the subsequent `.sort()` never touches
+  the read-only proxy (the set trap would throw). `updatePath` takes literal keys only (no predicate
+  paths yet) → resolve the raw index by id in handlers (`state.rows.findIndex`).
+- **`ref` fires at element creation, BEFORE insertion** → `el.focus()` in a ref is a no-op on a
+  detached node. Fix: `ref={el => queueMicrotask(() => el.focus())}` (node is in the DOM by the
+  microtask). A small framework ergonomics gap — a post-insert `onMount`/ref-timing hook is worth
+  considering (noted on the tracker). SSR-safe: the input only exists mid-edit, so the ref never
+  runs on the string backend.
+- **`.pivi-skin` app skin brought in (subset).** DemoFrame wraps the demo in the real Pivi app
+  chrome; `.pivi-skin` re-points the marketing tokens to the Bloomberg-grade app palette + remaps
+  the font vars to **IBM Plex** (self-hosted Sans 400/500/600 + Mono 400/500 from Fontsource,
+  NOT preloaded — below-fold + idle). Only the classes this demo uses were ported (`.tag`, `.tbl`,
+  `.label`); more land as further demos do. Because `@theme` maps `--color-*` to `var(--token)`,
+  re-pointing raw tokens inside the wrapper is enough — no utility rewrites.
+- **Browser-verified (WebBridge):** SSR bakes the full 18-row table (real first paint) → island
+  client-mounts on `idle` (single shared kernel `chunk-*` across boot/faq/records) → sort asc/desc,
+  filter (counts + subsetting), search, inline status edit (pill + filter counts recompute), inline
+  value edit (value + totals recompute), autofocus — all confirmed, 0 errors, pixel-faithful. Home
+  now ships **12.6 KB gz HTML + 9.6 KB gz island JS** (records adds ~5 KB incl. `pimas/store`),
+  everything else still 0 KB JS. Test-env note from #35 stands (`visible` unverifiable in WebBridge;
+  used `idle`). NOT deployed — local milestone, `dist/` gitignored, klarum.com still runs Next.
