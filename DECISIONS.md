@@ -401,3 +401,43 @@ whole list; structural changes (length / slot replacement) re-run For. **Deferre
 preserving identity) — `reconcile` first if klarum does server-refresh of keyed lists. 12
 tests. Size: new fixture `store: createStore` 1363 gz (budget 1400, initial baseline — includes
 the kernel); `core: full surface` 963→979 gz for `getListener`. 65 tests total green.
+
+---
+
+## Dogfood rung 2 — klarum.com port begins (2026-07-01)
+
+### 35. klarum-landing home page ported to pimas — milestone 1 (static shell + 1 island)
+The intermediate-stakes rung (#15). A parallel research agent (standing rule) settled the
+port strategy vs Next.js 16 + Tailwind v4; adopted below. Source lives in the
+`Klarum-Software/klarum-landing` repo under `site/` (the noahhyden.com model), consuming the
+real `pimas` package. **Milestone 1 scope (disciplined, not the whole site):** the home page's
+core marketing sections — Navbar, Hero (+ full workspace mock), Features, FAQ, Footer — with
+the **FAQ accordion as the one interactive island**. Deferred: the demo-heavy middle sections
+(Demo tab-switcher, InterfaceGallery, Algorithm, KnowledgeGraph, Capabilities, Process), the
+parallax HeroCover, and the other 18 pages.
+- **Tailwind v4 stays — compiled standalone.** Do NOT hand-translate 83 components to inline
+  styles (that was right for noahhyden's one-off page, wrong here). `build.mjs` shells out to
+  `@tailwindcss/cli` (no PostCSS, no config; auto-scans `src/**.tsx`, tree-shakes to used
+  utilities), and inlines the result. `globals.css` tokens (`:root` + `@theme inline` +
+  `@custom-variant dark` + the custom `.eyebrow/.mock-panel/.pill/.live-dot` utilities) copied
+  nearly verbatim; the demo-only `.pivi-skin` block + `tw-animate-css` dropped for this slice.
+  **The React→pimas port is mechanical when classes are kept:** `className`→`class`, `.map()`
+  for static lists, `next/Link|Image`→`<a>|<img>`, `useState`→`createSignal`, cond→`<Show>`,
+  `usePathname` dropped, `lucide-react`→inlined SVG pimas components (exact lucide paths). The
+  one discipline: Tailwind classes must be static literals (no interpolation in thunks).
+- **Fonts self-hosted** (Inter + JetBrains Mono woff2 from Fontsource; the home slice uses no
+  serif) replacing `next/font/google`; preloaded above-the-fold. **lucide** inlined (4 icons).
+- **Islands pipeline reused unchanged** from noahhyden (#32/#33): `<Island>` marker +
+  `<is-land>` + boot loader + esbuild `splitting` (one shared kernel). FAQ island shipped.
+- **Browser-verified (WebBridge):** the home page renders **pixel-faithfully** to the Next
+  original (nav, hero, the full sidebar+search+tenders workspace mock with colored match bars);
+  Tailwind compiled + applied; fonts loaded. FAQ island: SSR static → client-mounts → toggles
+  one-open-at-a-time with reactive `aria-expanded` + `<Show>` answer, **0 errors**. Home ships
+  **8.4 KB gz HTML (Tailwind inlined) + 4.3 KB gz island JS**; everything else 0 KB JS.
+- **Test-env note:** `IntersectionObserver` does not fire in the WebBridge browser (no
+  compositor), so `client="visible"` islands can't be verified there; switched FAQ to
+  `client="idle"` (via `requestIdleCallback`, not visibility-gated) — a fine choice for a small
+  island. `visible` remains supported (proven on noahhyden). **NOT deployed** — klarum.com still
+  runs the Next app; this is a local port milestone (`site/` source; `dist/` gitignored). Next:
+  port the demo sections (needs the `.pivi-skin` CSS + complex islands built on `createStore`:
+  records grid, agent playback), then the remaining pages.
