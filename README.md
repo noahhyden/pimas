@@ -126,9 +126,17 @@ derivations. A virtual DOM is not. `pimas/agent` turns that into an agent-facing
 
 Proven end-to-end driving a real HTTP stack (pivi's `/api/proposals` contract): a **preview →
 approve → commit** copilot where `speculate` shows the exact resulting totals, *approve* fires a
-real `PATCH`, and the backend persists it. Exploration, not a committed pivot — the core
-(Phases 1–5) is unchanged and the whole agent layer is opt-in (tree-shaken when unused; the
-hot-path floor moved only 679→698 gz).
+real `PATCH`, and the backend persists it. And proven on a **quantitative model** — the
+[`von-neumann/wall-live`](https://github.com/noahhyden/von-neumann) explainer: a self-replicating-
+lunar-factory simulation run entirely in a pimas graph (bill-of-materials as a copy-on-write store,
+results as memos), where the "electronics wall" what-if is a first-class `speculate` (exact
+after-state, nothing committed) and the core both computes the model *and* renders the page (~11 KB
+gz; the ported math is pinned to the reference implementation by a cross-language differential test).
+The sharpest fit for L3 is exactly this: **pure, derived-heavy quantitative models**, where "what-if"
+is the whole activity and the memo-purity caveat is free.
+
+Exploration, not a committed pivot — the core (Phases 1–5) is unchanged and the whole agent layer is
+opt-in (tree-shaken when unused; the hot-path floor moved only 679→698 gz).
 
 ## Develop
 

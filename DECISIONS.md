@@ -576,3 +576,20 @@ risk:** L3 correctness assumes memo purity (assumed, not enforced) — mitigate 
 no-op effects in speculation mode. Full writeup + staged plan: [`AGENT-NATIVE.md`](AGENT-NATIVE.md);
 tracker + spikes: issue #13. This likely supersedes the reason to ever build the compiler (#12 / #14 /
 #18.6) — that's a UI-rendering optimization with near-zero value to an agent surface.
+
+### 42. Agent-native, sharpened — an exact what-if engine for quantitative models (validated)
+Following #41, a research pass concluded that L3 `speculate`'s defensible frontier is not generic app
+state but **pure, derived-heavy quantitative models** — the one domain where the "only correct if memos
+are pure" caveat is *free* (such models are already pure functions of their inputs), and where
+hypothetical what-if / sensitivity is the entire activity. Proven by building `noahhyden/von-neumann`
+`wall-live/`: the `closure-sim` self-replicating-lunar-factory model run in a pimas graph
+(bill-of-materials = `createStore` COW, replication params = signals, closure/sim = memos). Its
+"electronics wall" analysis — which the reference Python does by deep-copy → toggle → re-run → diff →
+discard — becomes a first-class `speculate` (exact after-state vs a shadow graph, nothing committed);
+`pimas/agent` `explain()` names the field-level cause; the reactive core computes the model AND renders
+the page (~11 KB gz). The TS math is pinned to the Python by parity tests + a cross-language
+differential test (60 random factories / 540 fields, all match). Framing to use going forward: pimas is
+a purpose-built **reactive what-if + provenance engine**, dogfooded on real models; the reactive UI core
+is the delivery vehicle. WebMCP/adoption/standards are explicitly out of scope for this direction.
+Generalizes to the econ-model repos (road-econ, fiscal-incidence) whose hand-rolled `model_copy(update=…)`
+sweeps are a weaker reimplementation of `speculate`.

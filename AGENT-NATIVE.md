@@ -108,10 +108,28 @@ shadow. Design around it; don't pretend it's solved.
   stack** (pivi `/api/proposals`): a browser **preview → approve → commit** copilot
   (`Klarum-Software/pivi` worktree `spike/pimas-agent-records`, `agent-native/`) — `speculate`
   previews the exact totals, approve fires a real `PATCH`, the backend persists.
-- **Open forks** (need a human call): a React adapter for pivi's real Next frontend; wiring the
-  real Neon-backed gateway (needs creds — pivi's gateway can't boot from scratch: prod-cutover
-  Alembic + `proposals` is raw-SQL/migration-only); P0 hardening of `pimas/agent` (error
-  isolation, async actions, delta coalescing).
+- ✅ **Validated again, on a quantitative model** — `noahhyden/von-neumann` `wall-live/`: a live
+  rebuild of the `closure-sim` self-replicating-lunar-factory explainer, run in a pimas graph
+  (bill-of-materials = `createStore` COW, params = signals, results = memos). The "electronics
+  wall" analysis — which the Python does by deep-copy → toggle → re-run → diff → discard — becomes
+  a first-class `speculate`: exact after-state against a shadow graph, nothing committed, and the
+  bridge's `explain()` names the field-level cause. The core computes the model **and** renders the
+  page (~11 KB gz), and the TS math is pinned to the reference Python by a cross-language
+  differential test (60 random factories / 540 fields).
+
+**Sharpened framing (2026-07-01).** L3 is at its sharpest not on generic app state but on **pure,
+derived-heavy quantitative models** — finance/economics/engineering pipelines where hypothetical
+"what-if" is the whole activity and the fatal purity caveat is *free* (these models are already pure
+functions of their inputs). The defensible product-shaped framing is therefore **"an exact reactive
+what-if + provenance engine for quantitative models"** — proven by `wall-live`, and generalizes to
+input→derived-output model repos whose hand-rolled `model_copy(update=…)` sweeps are a weaker
+reimplementation of `speculate`.
+
+- **Open forks** (need a human call): the same treatment on an econ-model repo (road-econ /
+  fiscal-incidence) or a small reusable "quantitative model → pimas graph" helper; a React adapter
+  for pivi's real Next frontend; wiring the real Neon-backed gateway (needs creds — pivi's gateway
+  can't boot from scratch: prod-cutover Alembic + `proposals` is raw-SQL/migration-only); P0
+  hardening of `pimas/agent` (error isolation, async actions, delta coalescing).
 
 ## What this reframe changes about the roadmap
 
