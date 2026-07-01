@@ -480,3 +480,18 @@ chips (live counts), search, and **inline status + bid-value editing** — a rea
   now ships **12.6 KB gz HTML + 9.6 KB gz island JS** (records adds ~5 KB incl. `pimas/store`),
   everything else still 0 KB JS. Test-env note from #35 stands (`visible` unverifiable in WebBridge;
   used `idle`). NOT deployed — local milestone, `dist/` gitignored, klarum.com still runs Next.
+
+## Phase 5 autonomous loop (2026-07-01→) — living decisions in issue #11
+
+### 37. `onMount` — post-insert lifecycle hook at the backend seam (resolves the #36/#10 ref gap)
+Binding effects run during construction, BEFORE the tree is inserted, so a `ref` or effect sees a
+detached node (the #36 focus workaround). `onMount(fn)` runs `fn` once after insertion.
+- **At the RenderBackend seam, not the reactive core.** Added `scheduleMount(fn)` to the backend:
+  DOM → `queueMicrotask(fn)` (defers past the synchronous build+insert); string backend → **no-op**
+  (SSR is run-once, no live nodes). This makes onMount **automatically SSR-safe with no
+  server-specific export** — the active backend during `renderToString` is the string one — and
+  needs **zero changes to `reactive.ts`** (core stays DOM-free). Exported from `pimas/dom`.
+- **Usage:** pair with a `ref` to capture the node — `let el; onMount(() => el.focus()); <input ref={n => el = n} />`.
+  For teardown, register `onCleanup` at setup time, NOT inside onMount (documented). v1 has no
+  disposal-race guard (focusing a removed node is a harmless no-op) — kept minimal.
+- **Cost:** dom 1850 → 1875 gz (14 real bytes). 4 tests; 69 total green. Committed `6604bc1`.
