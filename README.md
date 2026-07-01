@@ -72,24 +72,33 @@ render(() => <Counter />, document.body); // only the text node updates on click
 | **3 — Backend seam + SVG** | renderer over a `RenderBackend` contract, SVG `createElementNS`, `pimas/server` `renderToString` | ✅ done |
 | **3b — Control flow** | `<Show>`/`<Switch>`/`<Match>`, keyed `<For>`, position-keyed `<Index>`, per-row owner scopes | ✅ done |
 | **4 — Port noahhyden.com** | rebuilt every page, static HTML via `pimas/server`, 0 KB JS, self-hosted fonts — **deployed live**, the canvas runtime is gone | ✅ done |
-| **5 — Interactivity + Klarum** | `createContext`, `createStore`, descriptor-capable `listen` seam, **islands** (client-rendered, lazy), Klarum home ported | 🚧 in progress |
+| **5 — Interactivity + Klarum** | `createContext`, `createStore`, `onMount`, `<ErrorBoundary>`/`catchError`, descriptor-capable `listen` seam, **islands** (client-rendered, lazy) — and klarum.com rebuilt on pimas | ✅ done |
 
-Real-browser tests live in `browser-test/` (`npm run test:browser`, drives a real Chrome).
-Architecture rationale for every choice is in [`DECISIONS.md`](DECISIONS.md); the phase
-tracker is [issue #1](../../issues/1).
+Real-browser tests live in `browser-test/` (`npm run test:browser`, drives a real Chrome;
+84 vitest + 15 browser tests green). Architecture rationale for every choice is in
+[`DECISIONS.md`](DECISIONS.md); the phase tracker is [issue #1](../../issues/1).
 
-### Phase 5 so far
+### Phase 5
 
 - **`createContext` / `useContext`** — rides the owner tree (survives portals/serialization).
 - **`createStore`** — nested reactive proxy: reading `state.rows[3].status` in an effect re-runs
   only when *that* field changes. Fine-grained down to the property.
+- **`onMount`** (`pimas/dom`) — run a callback once *after* the render's nodes are inserted (the
+  hook for focus/measure/wiring live nodes); a no-op under SSR.
+- **`<ErrorBoundary fallback={(err, reset) => …}>` / `catchError`** — errors in render, an effect,
+  or a memo route to the nearest boundary on the owner tree; `reset()` rebuilds the subtree.
 - **Islands** — interactive widgets ship as their own lazy-loaded, code-split bundles
   (`load`/`idle`/`visible`); the rest of the page stays 0 KB JS and is client-rendered on demand.
-  Proven on noahhyden.com (an accordion) and Klarum (an FAQ).
+  One shared pimas kernel chunk across all islands (no dual-kernel hazard).
 - **`listen` seam** takes a closure *or* a serializable handler descriptor `{ref, load, capture}`
   — the door to Qwik-style resumability is held open without paying for it yet.
-- **Deferred** (tracked in issues): `ErrorBoundary`, a microtask scheduler, the compiler
-  (thunk-eraser), store `produce`/`reconcile`, the claim/hydrate backend, resumability.
+- **Dogfood:** klarum.com rebuilt on pimas (branch `pimas-port` of the landing repo) — 19 routes,
+  0 KB JS on static pages, a 10-demo interactive `/showcase/` (records/pricing/analytics-charts/
+  agent-playback/knowledge-graph SVG/…), verified across static reactivity + browser interaction +
+  runtime timers.
+- **Deferred to a later phase** (tracked in issues): a microtask scheduler, the compiler
+  (thunk-eraser), store `produce`/`reconcile`, the claim/hydrate backend, resumability, and a
+  dev-mode `<Show>`/thunk-staleness warning.
 
 ## Develop
 
