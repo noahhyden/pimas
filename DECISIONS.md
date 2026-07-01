@@ -553,3 +553,26 @@ row updates the signal but not the pane. **Rule: never capture a signal's value 
 `<For each={() => sel().items}>`, `onClick={() => f(sel().id)}`. The correctly-written demos (discovery,
 issuers) already did this; the bug only hit the two that captured once. Committed `ea1c7f0`. This is
 exactly what the deferred dev-warning (#21 / issue #9) should catch — cross-linked.
+
+### 41. Direction spike — the agent-simulatable frontend (exploration, not a committed pivot)
+Concluded that pimas-as-a-general-React-replacement is not viable solo (React has thousands of
+maintainers; pimas one, and as a UI framework it dies with the portfolio site). Reframe: **the
+framework becomes the lab; the product-shaped idea is a niche in frontend-for-agents the incumbents
+structurally can't reach.** Every existing agent↔UI path is request/response or scrape — WebMCP
+(`document.modelContext.registerTool`, Chrome trial/Gemini) and CopilotKit expose *actions*; AG-UI /
+mcp-ui / generative-UI go agent→UI; computer-use/Playwright-MCP scrape the a11y tree. None expose the
+**live dependency graph** a fine-grained engine already maintains. Thesis in three layers: **L1** agent
+*subscribes* to live signal state (an agent-side `createEffect` already is this — near-free); **L2**
+*causal provenance* to the agent ("total changed because action X set cart[3].qty which the memo
+reads") — the sources/observers DAG makes it possible, human-facing versions exist (Redux/MobX/React
+Scan) but agent-facing is unclaimed; **L3 (the wedge)** *deterministic what-if simulation* — agent
+proposes hypothetical writes, framework computes derived memos in a **shadow graph without committing
+to DOM or firing effects**, returns predicted state so the agent can plan. L3 is categorically distinct
+from learned agent world-models (approximate) and optimistic updates (commit-then-rollback), and is
+**genuinely open**. Why pimas can do L3 and a VDOM can't: the engine is **pull-based with topology
+separate from value**, so you shadow just values+colors and reuse the real DAG read-only; naive
+set/read/restore corrupts the memo cache, the shadow overlay is the minimal correct mechanism. **The one
+risk:** L3 correctness assumes memo purity (assumed, not enforced) — mitigate with store copy-on-write +
+no-op effects in speculation mode. Full writeup + staged plan: [`AGENT-NATIVE.md`](AGENT-NATIVE.md);
+tracker + spikes: issue #13. This likely supersedes the reason to ever build the compiler (#12 / #14 /
+#18.6) — that's a UI-rendering optimization with near-zero value to an agent surface.
