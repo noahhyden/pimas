@@ -495,3 +495,26 @@ detached node (the #36 focus workaround). `onMount(fn)` runs `fn` once after ins
   For teardown, register `onCleanup` at setup time, NOT inside onMount (documented). v1 has no
   disposal-race guard (focusing a removed node is a harmless no-op) — kept minimal.
 - **Cost:** dom 1850 → 1875 gz (14 real bytes). 4 tests; 69 total green. Committed `6604bc1`.
+
+### 38. `<ErrorBoundary>` + `catchError` — error handling on the owner tree (#2)
+Errors thrown during initial render, an effect re-run, or a memo recompute route to the nearest
+enclosing boundary, walked up the OWNER tree exactly like context (#10) — survives portals/serialization.
+- **Core (reactive.ts):** an `errorHandler?` field on the Reactive node; `handleError(err, from)`
+  walks `owner` upward for the nearest handler and runs it at the boundary's PARENT scope (so a
+  rethrow escapes to the NEXT boundary up, not itself); the core `update()` gains a `catch` that sets
+  the node CLEAN (don't retry a thrower) then routes. `catchError(tryFn, handler)` primitive exported.
+- **Flow:** `<ErrorBoundary fallback={(err,reset)=>…}>{() => <App/>}</ErrorBoundary>` (static OR
+  render-fn fallback via `fn.length`; thunk children like `<Show>`).
+- **The one deviation from the design (verified correct):** the design had the handler's `setErrored`
+  write trigger a re-run to show the fallback — but for an INITIAL-build throw that write happens
+  during the boundary memo's OWN compute, and the pull marks the memo CLEAN at the end, clobbering the
+  re-dirty, so the fallback never appeared. Fix: render the fallback **inline in the same compute**
+  (the handler captures the error locally AND writes `errored`). `setErrored` still drives `reset()`
+  and later-UPDATE throws (which route from OUTSIDE the memo's compute, via the normal dirty→re-run
+  path). The reactive core is byte-for-byte the design; only ErrorBoundary's render body differs. I
+  added a DOM test for the throw-on-update swap (the exact path the deviation reasons about) — passes.
+- **NOT caught (matches Solid, documented):** throws in event handlers / setTimeout (no owner on the
+  stack). **SSR:** renders fallback if a boundary exists, else rethrows (prerender fails loudly).
+- **Cost:** handleError + the update() catch land in the indivisible kernel, so every core-pulling
+  fixture pays ~+86 gz — signal 700→725, full 1000→1125, dom 1875→1950, store 1400→1475; new
+  `flow: ErrorBoundary` fixture 912 gz (budget 1000). 15 tests; 84 total green. Committed `f9fadce`.
