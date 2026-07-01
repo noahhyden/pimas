@@ -27,6 +27,10 @@
       "types": "./dist/store/index.d.ts",
       "import": "./dist/store/index.js"
     },
+    "./agent": {
+      "types": "./dist/agent/bridge.d.ts",
+      "import": "./dist/agent/bridge.js"
+    },
     "./jsx-runtime": {
       "types": "./dist/dom/jsx-runtime.d.ts",
       "import": "./dist/dom/jsx-runtime.js"
