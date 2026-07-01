@@ -32,12 +32,37 @@ export interface CauseRecord {
   changed: string[];
 }
 
+/** Optional metadata for an exposed value (feeds the machine-readable descriptor). */
+export interface StateMeta {
+  /** JSON Schema for the value's type. */
+  schema?: object;
+  description?: string;
+}
+
+/** Optional metadata for an action (feeds the descriptor + WebMCP tool schema). */
+export interface ActionMeta {
+  /** JSON Schema for the arguments (object form). If omitted, `params` builds one. */
+  input?: object;
+  /** Positional parameter names, in order — lets a named-arg caller map to the
+   *  action's positional signature (e.g. `["id", "status"]`). */
+  params?: string[];
+  description?: string;
+  /** Hint that the action doesn't mutate persistent state (WebMCP readOnlyHint). */
+  readOnly?: boolean;
+}
+
+/** A machine-readable description of the surface — the artifact an agent reads. */
+export interface AgentDescriptor {
+  state: Record<string, { value: unknown; schema?: object; description?: string }>;
+  actions: Record<string, { input?: object; params?: string[]; description?: string; readOnly?: boolean }>;
+}
+
 /** The surface handed to `setup` — registers state/actions inside the root owner. */
 export interface AgentRegistrar {
   /** Expose a readable, subscribable value under a stable name. */
-  expose(name: string, read: Accessor<unknown>): void;
+  expose(name: string, read: Accessor<unknown>, meta?: StateMeta): void;
   /** Register an agent-callable action. */
-  action(name: string, fn: (...args: unknown[]) => unknown): void;
+  action(name: string, fn: (...args: unknown[]) => unknown, meta?: ActionMeta): void;
 }
 
 export interface AgentOptions {
@@ -55,6 +80,8 @@ export interface AgentBridge {
   snapshot(): { state: Record<string, unknown>; actions: string[] };
   /** Agent side: replay the current snapshot, then receive a delta on each change. */
   subscribe(listener: (e: AgentEvent) => void): () => void;
+  /** A machine-readable description of exposed state + actions (the wire contract). */
+  descriptor(): AgentDescriptor;
   /** Agent side: invoke a registered action by name. Unknown name throws. */
   call(name: string, ...args: unknown[]): unknown;
   /** L2: the causal record of the most recent action (or null before any call). */
@@ -73,7 +100,9 @@ export function createAgentBridge(setup: (r: AgentRegistrar) => void, opts: Agen
   const listeners = new Set<(e: AgentEvent) => void>();
   const latest = new Map<string, unknown>();
   const reads = new Map<string, Accessor<unknown>>();
+  const stateMeta = new Map<string, StateMeta>();
   const actions = new Map<string, (...args: unknown[]) => unknown>();
+  const actionMeta = new Map<string, ActionMeta>();
   let lastCause: CauseRecord | null = null;
   let dispose!: () => void;
 
@@ -86,8 +115,9 @@ export function createAgentBridge(setup: (r: AgentRegistrar) => void, opts: Agen
   };
 
   const registrar: AgentRegistrar = {
-    expose(name, read) {
+    expose(name, read, meta) {
       reads.set(name, read);
+      if (meta) stateMeta.set(name, meta);
       // The effect runs once now (seeds `latest`) and re-runs on every change to
       // whatever `read` touched — that re-run IS the push. No core change.
       createEffect(() => {
@@ -97,8 +127,9 @@ export function createAgentBridge(setup: (r: AgentRegistrar) => void, opts: Agen
         emit({ kind: "state", name, value, initial });
       });
     },
-    action(name, fn) {
+    action(name, fn, meta) {
       actions.set(name, fn);
+      if (meta) actionMeta.set(name, meta);
     },
   };
 
@@ -118,6 +149,24 @@ export function createAgentBridge(setup: (r: AgentRegistrar) => void, opts: Agen
       state: Object.fromEntries(latest),
       actions: [...actions.keys()],
     }),
+    descriptor: () => {
+      const state: AgentDescriptor["state"] = {};
+      for (const [name, value] of latest) {
+        const meta = stateMeta.get(name);
+        state[name] = { value, schema: meta?.schema, description: meta?.description };
+      }
+      const actionsOut: AgentDescriptor["actions"] = {};
+      for (const name of actions.keys()) {
+        const meta = actionMeta.get(name);
+        actionsOut[name] = {
+          input: meta?.input,
+          params: meta?.params,
+          description: meta?.description,
+          readOnly: meta?.readOnly,
+        };
+      }
+      return { state, actions: actionsOut };
+    },
     subscribe(listener) {
       // Replay the current state so a late subscriber isn't blind, then stream.
       for (const [name, value] of latest) listener({ kind: "state", name, value, initial: true });

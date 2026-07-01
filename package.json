@@ -31,6 +31,10 @@
       "types": "./dist/agent/bridge.d.ts",
       "import": "./dist/agent/bridge.js"
     },
+    "./agent/webmcp": {
+      "types": "./dist/agent/webmcp.d.ts",
+      "import": "./dist/agent/webmcp.js"
+    },
     "./jsx-runtime": {
       "types": "./dist/dom/jsx-runtime.d.ts",
       "import": "./dist/dom/jsx-runtime.js"
