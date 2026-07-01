@@ -5,8 +5,8 @@
  * pushes a delta for exactly that name.
  */
 import { describe, it, expect, vi } from "vitest";
-import { createSignal } from "pimas";
-import { createStore } from "pimas/store";
+import { createSignal, createMemo } from "pimas";
+import { createStore, onStoreWrite } from "pimas/store";
 import { createAgentBridge, type AgentEvent } from "../src/agent/bridge";
 
 describe("agent bridge — L1 subscribe (issue #13)", () => {
@@ -79,9 +79,56 @@ describe("agent bridge — L1 subscribe (issue #13)", () => {
     expect(bridge.snapshot()).toEqual({ state: { "row0.status": "open" }, actions: ["setStatus"] });
 
     bridge.call("setStatus", 0, "done"); // agent invokes → state change → push
-    expect(events.at(-1)).toEqual({ kind: "state", name: "row0.status", value: "done", initial: false });
+    const stateEvents = events.filter((e) => e.kind === "state");
+    expect(stateEvents.at(-1)).toEqual({ kind: "state", name: "row0.status", value: "done", initial: false });
 
     expect(() => bridge.call("nope")).toThrow(/no action/);
+
+    bridge.dispose();
+  });
+
+  it("records a causal record (L2): action → field writes + changed exposed values", () => {
+    const [s, set] = createStore({ rows: [{ id: "a", status: "open" }, { id: "b", status: "open" }] });
+    const openCount = createMemo(() => s.rows.filter((r) => r.status === "open").length);
+    const bridge = createAgentBridge(
+      (r) => {
+        r.expose("openCount", () => openCount());
+        r.action("setStatus", (i, st) => set("rows", i as number, "status", st));
+      },
+      { writeTap: (record) => onStoreWrite((e) => record(e.path.join("."))) },
+    );
+
+    const causes: AgentEvent[] = [];
+    bridge.subscribe((e) => e.kind === "cause" && causes.push(e));
+
+    bridge.call("setStatus", 0, "done");
+
+    expect(bridge.explain()).toEqual({
+      action: "setStatus",
+      args: [0, "done"],
+      writes: ["rows.0.status"],
+      changed: ["openCount"],
+    });
+    // the cause is also pushed to subscribers
+    expect(causes.at(-1)).toMatchObject({ kind: "cause", action: "setStatus", writes: ["rows.0.status"] });
+    expect(openCount()).toBe(1); // committed
+
+    bridge.dispose();
+  });
+
+  it("bridge.speculate predicts exposed state after an action, without committing (L3)", () => {
+    const [s, set] = createStore({ rows: [{ id: "a", n: 1 }, { id: "b", n: 2 }] });
+    const total = createMemo(() => s.rows.reduce((x, r) => x + r.n, 0));
+    const bridge = createAgentBridge((r) => {
+      r.expose("total", () => total());
+      r.action("setN", (i, v) => set("rows", i as number, "n", v));
+    });
+
+    const predicted = bridge.speculate("setN", 0, 100);
+    expect(predicted).toEqual({ total: 102 }); // 100 + 2
+
+    expect(total()).toBe(3); // real store untouched
+    expect(bridge.snapshot().state).toEqual({ total: 3 });
 
     bridge.dispose();
   });

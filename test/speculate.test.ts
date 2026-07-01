@@ -56,7 +56,7 @@ describe("speculate — L3 what-if oracle (issue #13)", () => {
     expect(n()).toBe(0);
   });
 
-  it("reads real store data during speculation but rejects store writes", () => {
+  it("reads real store data during speculation and predicts an EDIT via copy-on-write", () => {
     const [s, set] = createStore({ rows: [{ id: "r1", qty: 2 }, { id: "r2", qty: 3 }] });
     const [mult, setMult] = createSignal(1);
     const total = createMemo(() => s.rows.reduce((sum, r) => sum + r.qty, 0) * mult());
@@ -64,15 +64,19 @@ describe("speculate — L3 what-if oracle (issue #13)", () => {
     expect(total()).toBe(5); // (2+3)*1
 
     // Hypothetical view-state change (signal), reading real store rows.
-    const predicted = speculate(() => setMult(10), () => total());
-    expect(predicted).toBe(50);
+    expect(speculate(() => setMult(10), () => total())).toBe(50);
     expect(total()).toBe(5); // rolled back
 
-    // A store write inside speculate is rejected (would mutate committed state).
-    expect(() => speculate(() => set("rows", 0, "qty", 99), () => total())).toThrow(/copy-on-write/);
-    expect(s.rows[0]!.qty).toBe(2); // untouched
+    // Hypothetical store EDIT: the write lands in the rollback-scoped scratch
+    // (copy-on-write), never in the raw object.
+    const predicted = speculate(() => set("rows", 0, "qty", 100), () => total());
+    expect(predicted).toBe(103); // (100 + 3) * 1
+    expect(s.rows[0]!.qty).toBe(2); // real store untouched
+    expect(total()).toBe(5); // rolled back
 
-    void set;
+    // Exact: the prediction equals a real commit.
+    set("rows", 0, "qty", 100);
+    expect(total()).toBe(103);
   });
 
   it("supports the real mutation helpers (functional signal updates) as hypotheticals", () => {

@@ -18,7 +18,7 @@
  * Deferred to v2 (not needed yet): `produce` (mutable draft) and `reconcile`
  * (diff external data in, preserving identity). See DECISIONS.
  */
-import { createSignal, batch, getListener, isSpeculating } from "../reactive/index.js";
+import { createSignal, batch, getListener, speculationScratch } from "../reactive/index.js";
 
 const $RAW = Symbol("pimas.store.raw");
 const $NODES = Symbol("pimas.store.nodes");
@@ -28,6 +28,23 @@ const $KEYS = Symbol("pimas.store.keys");
 
 /** Per-object registry: key → its ping signal (a monotonic counter). */
 type Nodes = Record<PropertyKey, ReturnType<typeof createSignal<number>>>;
+
+// ── L2 provenance (#13): observe committed writes by path ────────────────────
+export interface StoreWriteEvent {
+  /** The path written, e.g. `["rows", 3, "status"]`. */
+  path: PropertyKey[];
+}
+const writeListeners = new Set<(e: StoreWriteEvent) => void>();
+
+/**
+ * Subscribe to committed store writes — the write PATH. Feeds L2 causal
+ * provenance ("`total` changed because a write hit `rows.3.status`"). Only REAL
+ * writes fire; speculation (#13) is silent. Returns an unsubscribe.
+ */
+export function onStoreWrite(fn: (e: StoreWriteEvent) => void): () => void {
+  writeListeners.add(fn);
+  return () => writeListeners.delete(fn);
+}
 
 // Stable proxy per raw object: reading the same nested object twice returns the
 // SAME proxy, so identity-keyed reconciliation (<For>) keeps reusing rows.
@@ -89,6 +106,17 @@ const traps: ProxyHandler<Record<PropertyKey, unknown>> = {
     // proxy, so their internal length/index reads still go through these traps.
     if (typeof value === "function") return value;
     track(target, key);
+    // L3 copy-on-write (#13): during speculation, a hypothetical edit lives in
+    // the rollback-scoped scratch, never in the raw object — return it here so
+    // derived memos recompute against the what-if without committing anything.
+    const scratch = speculationScratch();
+    if (scratch) {
+      const shadow = scratch.get(target) as Map<PropertyKey, unknown> | undefined;
+      if (shadow && shadow.has(key)) {
+        const ov = shadow.get(key);
+        return isWrappable(ov) ? wrap(ov) : ov;
+      }
+    }
     return isWrappable(value) ? wrap(value) : value;
   },
   has(target, key) {
@@ -126,6 +154,15 @@ function wrap<T extends object>(value: T): T {
 function setProperty(state: Record<PropertyKey, unknown>, key: PropertyKey, value: unknown): void {
   if (key === "__proto__") return; // prototype-pollution guard
   const next = unwrap(value);
+  // L3 copy-on-write (#13): a write while speculating goes to the rollback-scoped
+  // scratch, NOT the raw object — the real store is never mutated by a what-if.
+  const scratch = speculationScratch();
+  if (scratch) {
+    let shadow = scratch.get(state) as Map<PropertyKey, unknown> | undefined;
+    if (!shadow) scratch.set(state, (shadow = new Map()));
+    shadow.set(key, next);
+    return;
+  }
   if (Object.is(state[key], next)) return; // equality short-circuit — no notify
   const isArray = Array.isArray(state);
   const prevLen = isArray ? (state as unknown[]).length : 0;
@@ -190,12 +227,14 @@ export function createStore<T extends object>(init: T): [Store<T>, SetStoreFunct
   const raw = unwrap(init);
   const proxy = wrap(raw);
   const setStore = (...args: unknown[]): void => {
-    // A store write mutates the RAW object directly, so it can't ride the L3
-    // shadow (#13) — reject it until copy-on-write lands. Reads during
-    // speculation are fine (they return the real committed data).
-    if (isSpeculating())
-      throw new Error("pimas store: writes inside speculate() aren't supported yet (copy-on-write is a later layer)");
     batch(() => updatePath(raw as Record<PropertyKey, unknown>, args));
+    // L2 (#13): announce the committed write path. A speculative write records
+    // into the scratch (setProperty) and never reaches here as a real change —
+    // so speculation stays silent to provenance listeners.
+    if (writeListeners.size && !speculationScratch() && args.length >= 2) {
+      const path = args.slice(0, -1) as PropertyKey[];
+      for (const l of writeListeners) l({ path });
+    }
   };
   return [proxy, setStore as SetStoreFunction<T>];
 }

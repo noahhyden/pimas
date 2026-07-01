@@ -13,6 +13,7 @@ export {
   untrack,
   speculate,
   isSpeculating,
+  speculationScratch,
   getListener,
   onCleanup,
   createRoot,

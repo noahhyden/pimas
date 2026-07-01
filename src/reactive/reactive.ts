@@ -70,7 +70,12 @@ let flushing = false;
  *  `speculate` (tree-shaken away for anyone who never imports it) so the core's
  *  hot read/write path pays only a single null-check. The real graph is never
  *  touched during speculation. */
-let speculating: { read<T>(n: Reactive<T>): T; write<T>(n: Reactive<T>, v: T): T } | null = null;
+let speculating: {
+  read<T>(n: Reactive<T>): T;
+  write<T>(n: Reactive<T>, v: T): T;
+  /** Rollback-scoped scratchpad for userland primitives (e.g. store copy-on-write). */
+  scratch: Map<unknown, unknown>;
+} | null = null;
 
 const defaultEquals = <T>(a: T, b: T) => Object.is(a, b);
 
@@ -269,6 +274,16 @@ export function isSpeculating(): boolean {
 }
 
 /**
+ * The current speculation's rollback-scoped scratchpad, or null when not
+ * speculating. Lets a userland primitive (e.g. `pimas/store`) shadow its own
+ * out-of-graph state (copy-on-write) during a `speculate(...)`, discarded for
+ * free when the speculation ends.
+ */
+export function speculationScratch(): Map<unknown, unknown> | null {
+  return speculating ? speculating.scratch : null;
+}
+
+/**
  * L3 what-if oracle (issue #13). Apply hypothetical writes in `apply`, then
  * evaluate `read` — both against a SHADOW of the reactive graph. Reads see the
  * hypothetical values and memos recompute against them, but the real graph is
@@ -309,6 +324,7 @@ export function speculate<T>(apply: () => void, read: () => T): T {
       values.set(node, next);
       return next;
     },
+    scratch: new Map<unknown, unknown>(),
   };
   const prevObserver = currentObserver;
   const prevOwner = currentOwner;

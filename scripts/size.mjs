@@ -51,6 +51,10 @@ const alias = {
 // under budget); the cost lands only where L3 is actually pulled in —
 // full surface 1125→1325 (includes `speculate`), store 1475→1575 (the write
 // guard + `isSpeculating`), For 1350→1375 (the core branch). Opt-in, not bloat.
+// Re-baselined again (#13, store COW + L2): the store gains copy-on-write under
+// speculation (predict an EDIT without committing) + `onStoreWrite` provenance.
+// store 1575→1625. Both are the L3/L2 store features; still opt-in — a store
+// consumer that never speculates or subscribes to writes pays only the branches.
 const fixtures = {
   "core: signal only": [`import { createSignal } from "pimas"; createSignal(0);`, 725],
   "core: full surface": [`import * as R from "pimas"; globalThis.x = R;`, 1325],
@@ -59,7 +63,7 @@ const fixtures = {
   "flow: Show + Switch": [`import { Show, Switch, Match } from "pimas/flow"; globalThis.x = [Show, Switch, Match];`, 900],
   "flow: For (keyed)": [`import { For } from "pimas/flow"; globalThis.x = For;`, 1375],
   "flow: ErrorBoundary": [`import { ErrorBoundary } from "pimas/flow"; globalThis.x = ErrorBoundary;`, 1000],
-  "store: createStore": [`import { createStore } from "pimas/store"; globalThis.x = createStore;`, 1575],
+  "store: createStore": [`import { createStore } from "pimas/store"; globalThis.x = createStore;`, 1625],
 };
 
 let failed = false;
