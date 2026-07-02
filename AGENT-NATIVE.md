@@ -118,6 +118,17 @@ shadow. Design around it; don't pretend it's solved.
   bridge's `explain()` names the field-level cause. The core computes the model **and** renders the
   page (~11 KB gz), and the TS math is pinned to the reference Python by a cross-language
   differential test (60 random factories / 540 fields).
+- ✅ **Validated a 2nd time, on a structurally different model** — `composite-ind` `frontend/`: an
+  OECD/JRC composite-indicator index (8 countries × 3 pillars × 9 indicators) run in a pimas graph
+  (indicator table = `createStore` COW, method/pillar-weight inputs = signals, ranking = memos). Its
+  native **sensitivity/uncertainty** activity — which `analysis.py` computes with a hand-rolled
+  `build(model_copy(update=…))` loop — becomes a first-class **`speculateSweep`** (a pillar-weight
+  sweep, proven == N independent builds), with multi-factor scenarios as **`speculatePlan`** and
+  approve→apply as **`commitPlan`** (one coalesced L2 record). TS math pinned to Python by a
+  differential test (6254 field comparisons); the whole page is a browser-verified interactive
+  what-if (8.3 KB gz). This is the **first consumer of the D#51/#52 plan/sweep/commit surface**, and —
+  a cross-sectional normalise→rank pipeline vs. wall-live's time-stepped sim — the **N=2 data point**
+  that de-risks a future reusable "model→pimas graph" helper (D#51's stated gate).
 
 **Sharpened framing (2026-07-01).** L3 is at its sharpest not on generic app state but on **pure,
 derived-heavy quantitative models** — finance/economics/engineering pipelines where hypothetical
