@@ -764,3 +764,18 @@ for the target domain. Chose NOT to build the "model→pimas graph" helper (over
 von-neumann's model file is domain logic, not boilerplate; wait for a 2nd model to reveal the real commonality)
 and NOT to expose L3 via WebMCP (D#42 parks WebMCP). +5 vitest (189 total); bridge is opt-in, off the hot-path
 floor, no budget change. Commit 3a2fe88.
+
+### 52. Agent-native — `commitPlan` (the commit mirror of `speculatePlan`) (#13)
+`speculatePlan` previews a multi-factor scenario in a shadow, but committing it meant replaying `call()` per
+step — which produces N separate `CauseRecord`s / `cause` events / history entries, so an agent that approved
+"scenario X = 3 factors" got three disjoint records, never "applied scenario X." That breaks the preview→commit
+symmetry the agent-native validation flow (pivi) is built on. `commitPlan(steps)` applies all steps FOR REAL in
+one `batch()` (writes coalesce to a single flush) and records ONE coalesced L2 record (`action:"plan"`, the
+scenario's aggregated `writes` + `changed`), reusing `call()`'s provenance machinery once (single `writeTap`
+subscription + single before-snapshot). Returns the committed exposed state. Sync-pure, like `speculatePlan`;
+on a throw, partial writes may have landed and no coalesced record is emitted (documented). ~20 LOC in
+`bridge.ts`, no core change. This was the single in-pimas agent primitive that cleared the value/buildability
+bar (a scoping pass found delta-coalescing already covered by the scheduler seam D#47, and typed tool schemas
+merely ergonomic); the larger thesis-advancing step — a 2nd quantitative-model proof (`composite-ind`, whose
+`model_copy(update=…)` sensitivity sweeps map 1:1 onto `speculateSweep`) — is model-repo work that consumes the
+shipped surface. +2 vitest (191 total). Commit c61862e.

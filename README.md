@@ -81,7 +81,7 @@ render(() => <Counter />, document.body); // only the text node updates on click
 | **6 — Agent-native** | expose the reactive graph to an AI agent — subscribe (L1), causal provenance (L2), deterministic what-if `speculate` (L3), WebMCP projection; proven on a real HTTP stack | 🔬 exploration |
 
 Real-browser tests live in `browser-test/` (`npm run test:browser`, drives a real Chrome;
-189 vitest + 26 browser tests green). Architecture rationale for every choice is in
+191 vitest + 26 browser tests green). Architecture rationale for every choice is in
 [`DECISIONS.md`](DECISIONS.md); the phase tracker is [issue #1](../../issues/1).
 
 ### Phase 5
@@ -159,7 +159,7 @@ derivations. A virtual DOM is not. `pimas/agent` turns that into an agent-facing
   because the engine is pull-based with topology separate from value; store copy-on-write covers
   edits. Distinct from learned agent world-models (approximate) and optimistic updates (commit-
   then-rollback). The bridge adds the **planning half**: `speculatePlan(steps)` composes a
-  multi-factor scenario in one shadow, `speculateSweep(name, argsList)` runs a sensitivity sweep —
+  multi-factor scenario in one shadow, `speculateSweep(name, argsList)` runs a sensitivity sweep, `commitPlan(steps)` commits an approved scenario as one action —
   the core of a what-if engine for quantitative models. (D#51)
 - **WebMCP.** `pimas/agent/webmcp` `toWebMCP(bridge)` projects actions → tools and state →
   read-only `get_*` tools onto the browser `document.modelContext` standard; the bridge's live
