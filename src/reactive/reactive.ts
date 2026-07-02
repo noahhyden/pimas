@@ -65,6 +65,13 @@ let batchDepth = 0;
 /** Effects marked dirty/check, awaiting a flush. */
 const effectQueue: Reactive[] = [];
 let flushing = false;
+/** A custom flush scheduler, or `null` for the synchronous default. When set,
+ *  a synchronous write-burst is coalesced into one deferred `flush()` call
+ *  (e.g. via `queueMicrotask`). Null keeps the write→flush path a direct call —
+ *  the seam costs the common case only a single branch. */
+let scheduler: ((flush: () => void) => void) | null = null;
+/** Latch: a deferred flush is already queued for this scheduler turn. */
+let scheduled = false;
 /** Non-null while a `speculate(...)` what-if evaluation is in progress (L3, #13).
  *  Reads/writes route through its methods; the heavy shadow logic lives in
  *  `speculate` (tree-shaken away for anyone who never imports it) so the core's
@@ -115,7 +122,7 @@ function writeNode<T>(node: Reactive<T>, next: T): T {
   node.value = next;
   // PUSH: mark direct dependents DIRTY (transitive ones become CHECK).
   for (const o of node.observers) stale(o, DIRTY);
-  if (batchDepth === 0) flushEffects();
+  if (batchDepth === 0) requestFlush();
   return next;
 }
 
@@ -181,6 +188,53 @@ function flushEffects(): void {
   } finally {
     flushing = false;
   }
+}
+
+/** Flush now (the default) or hand the drain to a custom scheduler, coalescing a
+ *  write-burst into one turn. The latch is cleared *before* the drain so that
+ *  writes made inside a running effect are serialized by the `flushing` guard
+ *  (not the latch) — the drain loop picks them up in the same pass. */
+function requestFlush(): void {
+  if (!scheduler) return flushEffects();
+  if (scheduled) return;
+  scheduled = true;
+  scheduler(flushScheduled);
+}
+
+/** The bound drain a custom scheduler runs — shared (not per-request) so the
+ *  common no-scheduler path allocates nothing. */
+function flushScheduled(): void {
+  scheduled = false;
+  flushEffects();
+}
+
+/**
+ * Install a custom flush scheduler (e.g. `(flush) => queueMicrotask(flush)`) to
+ * coalesce a burst of synchronous writes into one deferred flush — effects still
+ * run in FIFO enqueue order, just later. Pass nothing (or `null`) to restore the
+ * synchronous default. Returns the previous scheduler so callers can nest/restore.
+ *
+ * The default is synchronous because `renderToString` and post-write DOM reads
+ * depend on effects having flushed by the time the write call returns; deferring
+ * is strictly opt-in (a client-side perf choice — see `flushSync` for the escape
+ * hatch when a custom scheduler is installed).
+ */
+export function setScheduler(
+  fn?: ((flush: () => void) => void) | null,
+): ((flush: () => void) => void) | null {
+  const prev = scheduler;
+  scheduler = fn ?? null;
+  return prev;
+}
+
+/** Force any queued effects to drain synchronously now, regardless of the
+ *  installed scheduler. The escape hatch for code that must observe up-to-date
+ *  state immediately (SSR, tests) while a deferred scheduler is active. Clears
+ *  the pending-flush latch so a scheduler that *dropped* its callback (or one
+ *  being torn down) can't wedge all future flushes. */
+export function flushSync(): void {
+  scheduled = false;
+  flushEffects();
 }
 
 // ── Teardown ───────────────────────────────────────────────────────────────
@@ -254,7 +308,7 @@ export function batch<T>(fn: () => T): T {
     return fn();
   } finally {
     batchDepth--;
-    flushEffects();
+    requestFlush();
   }
 }
 

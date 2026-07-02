@@ -4,6 +4,8 @@ import {
   createEffect,
   createMemo,
   batch,
+  setScheduler,
+  flushSync,
   untrack,
   onCleanup,
   createRoot,
@@ -138,6 +140,100 @@ describe("batch", () => {
 
   it("returns the callback result", () => {
     expect(batch(() => 7)).toBe(7);
+  });
+});
+
+describe("scheduler seam", () => {
+  it("flushes synchronously by default", () => {
+    // The regression lock: a write's effects must be observable the instant the
+    // write returns (renderToString + post-write DOM reads depend on this).
+    const [n, setN] = createSignal(0);
+    const seen: number[] = [];
+    createRoot(() => createEffect(() => seen.push(n())));
+    setN(1);
+    expect(seen).toEqual([0, 1]); // no await — already flushed
+  });
+
+  it("a custom scheduler defers the flush until it is driven", () => {
+    let captured: (() => void) | null = null;
+    const prev = setScheduler((flush) => {
+      captured = flush;
+    });
+    try {
+      const [n, setN] = createSignal(0);
+      const spy = vi.fn();
+      createRoot(() => createEffect(() => (n(), spy())));
+      expect(spy).toHaveBeenCalledTimes(1); // creation runs synchronously
+
+      setN(1);
+      expect(spy).toHaveBeenCalledTimes(1); // deferred — not re-run yet
+      captured!(); // drive the captured flush
+      expect(spy).toHaveBeenCalledTimes(2);
+    } finally {
+      setScheduler(prev);
+    }
+  });
+
+  it("coalesces a synchronous write-burst into one microtask flush, FIFO order", async () => {
+    const prev = setScheduler((flush) => queueMicrotask(flush));
+    try {
+      const [a, setA] = createSignal(0);
+      const [b, setB] = createSignal(0);
+      const order: string[] = [];
+      createRoot(() => {
+        createEffect(() => (a(), order.push("A")));
+        createEffect(() => (b(), order.push("B")));
+      });
+      order.length = 0; // drop the synchronous creation runs
+
+      setA(1);
+      setB(1);
+      setA(2); // A already dirty → not re-enqueued
+      expect(order).toEqual([]); // nothing flushed synchronously
+
+      await Promise.resolve(); // let the coalesced microtask run
+      expect(order).toEqual(["A", "B"]); // one flush, enqueue order, each once
+    } finally {
+      setScheduler(prev);
+    }
+  });
+
+  it("skips an effect disposed before a deferred flush runs", async () => {
+    const prev = setScheduler((flush) => queueMicrotask(flush));
+    try {
+      const [n, setN] = createSignal(0);
+      const spy = vi.fn();
+      let dispose!: () => void;
+      createRoot((d) => {
+        dispose = d;
+        createEffect(() => (n(), spy()));
+      });
+      expect(spy).toHaveBeenCalledTimes(1);
+
+      setN(1); // enqueues the effect for the deferred flush
+      dispose(); // …but it's disposed before the microtask fires
+      await Promise.resolve();
+      expect(spy).toHaveBeenCalledTimes(1); // disposed → skipped
+    } finally {
+      setScheduler(prev);
+    }
+  });
+
+  it("flushSync forces a drain while a deferred scheduler is installed", () => {
+    const prev = setScheduler(() => {
+      /* never auto-flushes */
+    });
+    try {
+      const [n, setN] = createSignal(0);
+      const seen: number[] = [];
+      createRoot(() => createEffect(() => seen.push(n())));
+      setN(1);
+      expect(seen).toEqual([0]); // scheduler dropped the flush
+      flushSync(); // escape hatch drains now
+      expect(seen).toEqual([0, 1]);
+    } finally {
+      setScheduler(prev);
+    }
   });
 });
 

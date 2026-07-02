@@ -78,16 +78,25 @@ const alias = {
 // resumable page ships the dispatcher, never the component code. Deliberate, not
 // bloat: a page with no serializable handlers emits zero extra bytes (0-KB-static
 // guarantee preserved).
+// Re-baselined for the SCHEDULER SEAM (#3): `writeNode`/`batch` now route the
+// implicit flush through `requestFlush`, so the flush *timing* is pluggable —
+// the default stays a direct synchronous `flushEffects()` (byte-for-byte timing
+// unchanged), and installing a `queueMicrotask` scheduler coalesces a write-burst
+// into one deferred flush. The indirection + the shared drain land in the
+// indivisible kernel, so every core consumer pays a little: signal 725→740,
+// For 1375→1400, store 1675→1700. `full surface` 1325→1410 additionally includes
+// the two new exports (`setScheduler`/`flushSync`), which tree-shake away for
+// anyone who never installs a scheduler. Foundational, opt-in, not bloat.
 const fixtures = {
-  "core: signal only": [`import { createSignal } from "pimas"; createSignal(0);`, 725],
-  "core: full surface": [`import * as R from "pimas"; globalThis.x = R;`, 1325],
+  "core: signal only": [`import { createSignal } from "pimas"; createSignal(0);`, 740],
+  "core: full surface": [`import * as R from "pimas"; globalThis.x = R;`, 1410],
   "dom: render + h": [`import { render, h } from "pimas/dom"; globalThis.x = [render, h];`, 1950],
   "server: renderToString": [`import { renderToString } from "pimas/server"; globalThis.x = renderToString;`, 1900],
   "resume: dispatcher": [`import { resume, registerHandler } from "pimas/resume"; globalThis.x = [resume, registerHandler];`, 900],
   "flow: Show + Switch": [`import { Show, Switch, Match } from "pimas/flow"; globalThis.x = [Show, Switch, Match];`, 900],
-  "flow: For (keyed)": [`import { For } from "pimas/flow"; globalThis.x = For;`, 1375],
+  "flow: For (keyed)": [`import { For } from "pimas/flow"; globalThis.x = For;`, 1400],
   "flow: ErrorBoundary": [`import { ErrorBoundary } from "pimas/flow"; globalThis.x = ErrorBoundary;`, 1000],
-  "store: createStore": [`import { createStore } from "pimas/store"; globalThis.x = createStore;`, 1675],
+  "store: createStore": [`import { createStore } from "pimas/store"; globalThis.x = createStore;`, 1700],
   "store: + reconcile": [`import { createStore, reconcile } from "pimas/store"; globalThis.x = [createStore, reconcile];`, 2050],
   "store: + produce": [`import { createStore, produce } from "pimas/store"; globalThis.x = [createStore, produce];`, 1925],
 };

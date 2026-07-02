@@ -10,6 +10,8 @@ export {
   createEffect,
   createMemo,
   batch,
+  setScheduler,
+  flushSync,
   untrack,
   speculate,
   isSpeculating,
