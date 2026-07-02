@@ -133,6 +133,32 @@ describe("agent bridge — L1 subscribe (issue #13)", () => {
     bridge.dispose();
   });
 
+  it("retains a bounded L2 change log (history), oldest→newest", () => {
+    const [s, set] = createStore({ rows: [{ id: "a", status: "open" }, { id: "b", status: "open" }] });
+    const openCount = createMemo(() => s.rows.filter((r) => r.status === "open").length);
+    const bridge = createAgentBridge(
+      (r) => {
+        r.expose("openCount", () => openCount());
+        r.action("setStatus", (i, st) => set("rows", i as number, "status", st));
+      },
+      { writeTap: (record) => onStoreWrite((e) => record(e.path.join("."))), historyLimit: 2 },
+    );
+
+    expect(bridge.history()).toEqual([]); // nothing before any call
+
+    bridge.call("setStatus", 0, "done");
+    bridge.call("setStatus", 1, "done");
+    // both retained, oldest→newest
+    expect(bridge.history().map((c) => c.args)).toEqual([[0, "done"], [1, "done"]]);
+
+    bridge.call("setStatus", 0, "open"); // exceeds historyLimit:2 → oldest dropped
+    expect(bridge.history().map((c) => c.args)).toEqual([[1, "done"], [0, "open"]]);
+    expect(bridge.history(1).map((c) => c.args)).toEqual([[0, "open"]]); // last N
+    expect(bridge.explain()!.args).toEqual([0, "open"]); // last-cause unchanged
+
+    bridge.dispose();
+  });
+
   it("isolates a throwing listener: siblings still receive, host graph stays intact", () => {
     // emit() runs INSIDE the exposing effect, so an unguarded listener throw
     // would break sibling listeners AND the host's reactive flush. The throw is

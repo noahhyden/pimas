@@ -73,6 +73,8 @@ export interface AgentOptions {
    *   writeTap: (record) => onStoreWrite((e) => record(e.path.join(".")))
    */
   writeTap?: (record: (label: string) => void) => () => void;
+  /** How many recent causal records `history()` retains (L2 change log). Default 50. */
+  historyLimit?: number;
 }
 
 export interface AgentBridge {
@@ -86,6 +88,9 @@ export interface AgentBridge {
   call(name: string, ...args: unknown[]): unknown;
   /** L2: the causal record of the most recent action (or null before any call). */
   explain(): CauseRecord | null;
+  /** L2 change log: recent causal records, oldest→newest (bounded by
+   *  `historyLimit`). `limit` returns only the last N. Empty before any call. */
+  history(limit?: number): CauseRecord[];
   /** L3: predict the exposed state after `actionName(...args)` WITHOUT committing. */
   speculate(actionName: string, ...args: unknown[]): Record<string, unknown>;
   /** Tear down every exposed subscription (disposes the root owner). */
@@ -104,6 +109,8 @@ export function createAgentBridge(setup: (r: AgentRegistrar) => void, opts: Agen
   const actions = new Map<string, (...args: unknown[]) => unknown>();
   const actionMeta = new Map<string, ActionMeta>();
   let lastCause: CauseRecord | null = null;
+  const causeLog: CauseRecord[] = [];
+  const historyLimit = opts.historyLimit ?? 50;
   let dispose!: () => void;
 
   const emit = (e: AgentEvent): void => {
@@ -202,10 +209,15 @@ export function createAgentBridge(setup: (r: AgentRegistrar) => void, opts: Agen
       }
       const changed = [...latest.keys()].filter((k) => !Object.is(before.get(k), latest.get(k)));
       lastCause = { action: name, args, writes, changed };
+      // Retain a bounded change log (oldest→newest) so an agent can see the
+      // recent sequence of causes, not just the last one (L2, #13).
+      causeLog.push(lastCause);
+      if (causeLog.length > historyLimit) causeLog.shift();
       emit({ kind: "cause", action: name, args, writes, changed });
       return result;
     },
     explain: () => lastCause,
+    history: (limit) => (limit == null ? causeLog.slice() : causeLog.slice(-limit)),
     speculate(actionName, ...args) {
       const fn = requireAction(actionName);
       // Apply the action + read every exposed value against a SHADOW of the graph
