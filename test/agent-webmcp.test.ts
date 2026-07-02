@@ -91,6 +91,51 @@ describe("toWebMCP — project the bridge onto the WebMCP tool API (issue #13)",
     expect(tools.has("records.get_n")).toBe(true);
   });
 
+  it("projects L3 as simulate_<name> tools that predict without committing", async () => {
+    const { s, bridge } = build();
+    const { host, tools } = mockHost();
+    toWebMCP(bridge, { provider: host });
+
+    const sim = tools.get("simulate_setN")!;
+    expect(sim.annotations).toEqual({ readOnlyHint: true }); // a what-if never mutates
+    const predicted = await callTool(sim, { value: 77 });
+    expect(predicted).toEqual({ n: 77 }); // predicted after-state
+    expect(s.n).toBe(1); // ...but NOTHING committed — the real store is untouched
+
+    // A read-only action has nothing to speculate → no simulate_ tool.
+    expect(tools.has("simulate_peek")).toBe(false);
+  });
+
+  it("projects simulate_plan (multi-factor) and simulate_sweep (sensitivity)", async () => {
+    const { s, bridge } = build();
+    const { host, tools } = mockHost();
+    toWebMCP(bridge, { provider: host });
+
+    // plan: several steps composed in one shadow; last-write-wins, nothing commits
+    const planned = await callTool(tools.get("simulate_plan")!, {
+      steps: [{ action: "setN", args: [3] }, { action: "setN", args: [8] }],
+    });
+    expect(planned).toEqual({ n: 8 });
+
+    // sweep: one independent prediction per arg-set
+    const swept = await callTool(tools.get("simulate_sweep")!, {
+      action: "setN",
+      argsList: [[10], [20], [30]],
+    });
+    expect(swept).toEqual([{ n: 10 }, { n: 20 }, { n: 30 }]);
+
+    expect(s.n).toBe(1); // every what-if left the real store untouched
+  });
+
+  it("simulateTools:false yields a poke-and-rescrape baseline (the A/B switch)", () => {
+    const { bridge } = build();
+    const { host, tools } = mockHost();
+    toWebMCP(bridge, { provider: host, simulateTools: false });
+    expect([...tools.keys()].some((k) => k.startsWith("simulate_"))).toBe(false);
+    expect(tools.has("setN")).toBe(true); // actions + reads still present
+    expect(tools.has("get_n")).toBe(true);
+  });
+
   it("returns null host under Node and throws without a provider", () => {
     expect(detectModelContext()).toBe(null);
     const { bridge } = build();
