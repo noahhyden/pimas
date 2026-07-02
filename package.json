@@ -23,6 +23,10 @@
       "types": "./dist/dom/resume.d.ts",
       "import": "./dist/dom/resume.js"
     },
+    "./hydrate": {
+      "types": "./dist/dom/claim.d.ts",
+      "import": "./dist/dom/claim.js"
+    },
     "./compiler": {
       "types": "./dist/compiler/index.d.ts",
       "import": "./dist/compiler/index.js"

@@ -23,6 +23,7 @@ const alias = {
   "pimas/dom": src("dom/index.ts"),
   "pimas/server": src("server/index.ts"),
   "pimas/resume": src("dom/resume.ts"),
+  "pimas/hydrate": src("dom/claim.ts"),
   "pimas/flow": src("flow/index.ts"),
   "pimas/store": src("store/index.ts"),
 };
@@ -87,12 +88,19 @@ const alias = {
 // For 1375→1400, store 1675→1700. `full surface` 1325→1410 additionally includes
 // the two new exports (`setScheduler`/`flushSync`), which tree-shake away for
 // anyone who never installs a scheduler. Foundational, opt-in, not bloat.
+// New fixture for the CLAIM/HYDRATE backend (#6, D#31): `pimas/hydrate` adopts
+// server DOM in place (reuse nodes + wire reactivity) instead of client-render-first
+// discarding it. Unlike renderer-free `pimas/resume` (the listener half), claim
+// RE-EXECUTES components, so it necessarily pulls the full renderer — budget ≈ the
+// `dom` render path (~1941 gz) + the plan-tree build/adopt walk (~110 gz) = 2052,
+// budget 2075. A separate subpath so it never touches the `pimas/dom` render budget.
 const fixtures = {
   "core: signal only": [`import { createSignal } from "pimas"; createSignal(0);`, 740],
   "core: full surface": [`import * as R from "pimas"; globalThis.x = R;`, 1410],
   "dom: render + h": [`import { render, h } from "pimas/dom"; globalThis.x = [render, h];`, 1950],
   "server: renderToString": [`import { renderToString } from "pimas/server"; globalThis.x = renderToString;`, 1900],
   "resume: dispatcher": [`import { resume, registerHandler } from "pimas/resume"; globalThis.x = [resume, registerHandler];`, 900],
+  "hydrate: claim": [`import { claim } from "pimas/hydrate"; globalThis.x = claim;`, 2075],
   "flow: Show + Switch": [`import { Show, Switch, Match } from "pimas/flow"; globalThis.x = [Show, Switch, Match];`, 900],
   "flow: For (keyed)": [`import { For } from "pimas/flow"; globalThis.x = For;`, 1400],
   "flow: ErrorBoundary": [`import { ErrorBoundary } from "pimas/flow"; globalThis.x = ErrorBoundary;`, 1000],
