@@ -80,7 +80,11 @@ export function detectModelContext(): ModelContext | null {
 
 /** Shape a bridge return value into the MCP content envelope reference agents expect. */
 function envelope(value: unknown): { content: Array<{ type: "text"; text: string }> } {
-  const text = typeof value === "string" ? value : JSON.stringify(value);
+  // MCP content text MUST be a string. `JSON.stringify(undefined)` is `undefined`
+  // (not a string) — a void action (e.g. a setter that returns nothing) would
+  // otherwise emit `text: undefined`, which a reference agent's JSON.parse rejects.
+  // Coalesce nullish to JSON `null`.
+  const text = typeof value === "string" ? value : JSON.stringify(value ?? null);
   return { content: [{ type: "text", text }] };
 }
 

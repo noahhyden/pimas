@@ -127,6 +127,17 @@ describe("toWebMCP — project the bridge onto the WebMCP tool API (issue #13)",
     expect(s.n).toBe(1); // every what-if left the real store untouched
   });
 
+  it("envelopes a void action's undefined return as valid JSON null (not `undefined`)", async () => {
+    const bridge = createAgentBridge((r) => {
+      r.action("noop", () => undefined, { description: "returns nothing" }); // a void setter
+    });
+    const { host, tools } = mockHost();
+    toWebMCP(bridge, { provider: host });
+    const r = (await tools.get("noop")!.execute({})) as { content: Array<{ text: string }> };
+    expect(r.content[0]!.text).toBe("null"); // NOT the string "undefined" / not literal undefined
+    expect(() => JSON.parse(r.content[0]!.text)).not.toThrow(); // a reference agent can parse it
+  });
+
   it("simulateTools:false yields a poke-and-rescrape baseline (the A/B switch)", () => {
     const { bridge } = build();
     const { host, tools } = mockHost();
