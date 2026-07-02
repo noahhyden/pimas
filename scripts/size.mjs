@@ -56,12 +56,13 @@ const alias = {
 // speculation (predict an EDIT without committing) + `onStoreWrite` provenance.
 // store 1575→1625. Both are the L3/L2 store features; still opt-in — a store
 // consumer that never speculates or subscribes to writes pays only the branches.
-// Re-baselined for `reconcile` (#5, createStore v2): the setter (`updatePath`)
-// now detects a reconcile-tagged updater + shape-checks it — store 1625→1700.
-// The heavy diff walkers (array key-match, in-place field merge, recursion) are
-// carried in a CLOSURE on the tag, so they tree-shake away for a createStore
-// consumer that never imports `reconcile`; the "+ reconcile" fixture shows the
-// opt-in cost (~+280 gz over createStore alone). Opt-in, not bloat.
+// Re-baselined for createStore v2 (#5): `reconcile` + `produce`. Both are
+// in-place tagged updaters sharing ONE detection ($UPDATER) in the setter, so a
+// createStore consumer that imports neither pays for a single tag lookup only:
+// store 1625→1675. Each feature's heavy logic (reconcile's diff walkers /
+// produce's writable draft traps) rides in a CLOSURE on the tag and tree-shakes
+// away — the "+ reconcile" (~+300 gz) and "+ produce" (~+190 gz) fixtures show
+// each opt-in cost. Opt-in, not bloat.
 // Re-baselined for RESUMABILITY (#6/#30): the string backend's `listen` now
 // serializes handler DESCRIPTORS (emits `on:<type>` + a per-render capture table),
 // and `renderToString` flushes that table as an `application/pimas-state` script.
@@ -80,8 +81,9 @@ const fixtures = {
   "flow: Show + Switch": [`import { Show, Switch, Match } from "pimas/flow"; globalThis.x = [Show, Switch, Match];`, 900],
   "flow: For (keyed)": [`import { For } from "pimas/flow"; globalThis.x = For;`, 1375],
   "flow: ErrorBoundary": [`import { ErrorBoundary } from "pimas/flow"; globalThis.x = ErrorBoundary;`, 1000],
-  "store: createStore": [`import { createStore } from "pimas/store"; globalThis.x = createStore;`, 1700],
+  "store: createStore": [`import { createStore } from "pimas/store"; globalThis.x = createStore;`, 1675],
   "store: + reconcile": [`import { createStore, reconcile } from "pimas/store"; globalThis.x = [createStore, reconcile];`, 2050],
+  "store: + produce": [`import { createStore, produce } from "pimas/store"; globalThis.x = [createStore, produce];`, 1925],
 };
 
 let failed = false;

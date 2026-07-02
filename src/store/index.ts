@@ -15,18 +15,23 @@
  * which mutates the raw object and pings only the signals for the fields that
  * actually changed — inside a `batch`, so dependent effects flush once.
  *
- * v2 `reconcile` (#5): diff external data into the store preserving object
- * identity (matched by key) so a server-refreshed keyed list reuses row proxies
- * and keeps keyed `<For>` stable — see `reconcile` below. `produce` (mutable
- * draft) is still deferred (sugar only). See DECISIONS.
+ * v2 (#5): `reconcile` diffs external data in, preserving object identity
+ * (matched by key) so a server-refreshed keyed list reuses row proxies and keeps
+ * keyed `<For>` stable; `produce` is Immer-style mutable-draft sugar whose writes
+ * route through the same fine-grained setter. Both are tree-shakeable tagged
+ * updaters — a consumer that imports neither pays for neither. See DECISIONS.
  */
 import { createSignal, batch, getListener, speculationScratch } from "../reactive/index.js";
 
 const $RAW = Symbol("pimas.store.raw");
 const $NODES = Symbol("pimas.store.nodes");
-// Tags a `reconcile(next)` updater so the setter diffs-in-place instead of
-// replacing the reference (which would re-mint every proxy and rebuild <For>).
-const $RECONCILE = Symbol("pimas.store.reconcile");
+// Tags an in-place updater (reconcile/produce): the setter runs its `apply`
+// closure instead of replacing the target reference. ONE tag for both keeps the
+// setter's always-shipped cost to a single lookup; each `apply` carries its own
+// heavy logic (diff walkers / draft traps) so they tree-shake for non-users.
+const $UPDATER = Symbol("pimas.store.updater");
+// Sentinel `key` meaning "the parent object itself" — a root-level updater.
+const ROOT = Symbol("pimas.store.root");
 // One extra tracking signal per object, pinged when its key set / array length
 // changes — so `Object.keys`, `in`, iteration, and `.length` are reactive.
 const $KEYS = Symbol("pimas.store.keys");
@@ -182,20 +187,23 @@ function setProperty(state: Record<PropertyKey, unknown>, key: PropertyKey, valu
   }
 }
 
-// ── reconcile (#5): diff external data in, preserving row identity ────────────
+// ── in-place updaters: reconcile + produce (#5) ──────────────────────────────
 
-interface ReconcileConfig {
-  /** Unwrapped replacement value (used for the shape check + plain-replace fallback). */
-  next: unknown;
-  /** Diff `next` into `prev` in place. A CLOSURE so the walkers below are pulled
-   *  into the bundle only when `reconcile` is actually imported — a createStore
-   *  consumer that never reconciles pays nothing (tree-shaken, like speculate). */
-  run: (prev: Record<PropertyKey, unknown>) => void;
+/** Applies an in-place update to `parent[key]` (or `parent` itself for ROOT). */
+type StoreUpdater = (parent: Record<PropertyKey, unknown>, key: PropertyKey | typeof ROOT) => void;
+
+/** The updater tag on a value, if any. `produce` returns a tagged FUNCTION (so
+ *  its draft type infers from the setter's updater slot); `reconcile` a tagged
+ *  object — so check both. */
+function updaterTag(v: unknown): StoreUpdater | undefined {
+  return v && (typeof v === "object" || typeof v === "function")
+    ? (v as { [$UPDATER]?: StoreUpdater })[$UPDATER]
+    : undefined;
 }
 
-/** The reconcile tag on a value, if any. */
-function reconcileTag(v: unknown): ReconcileConfig | undefined {
-  return v && typeof v === "object" ? (v as { [$RECONCILE]?: ReconcileConfig })[$RECONCILE] : undefined;
+/** Resolve an updater's target: the parent itself (ROOT) or `parent[key]`. */
+function updaterTarget(parent: Record<PropertyKey, unknown>, key: PropertyKey | typeof ROOT): unknown {
+  return key === ROOT ? parent : parent[key];
 }
 
 /**
@@ -283,10 +291,10 @@ function reconcileArray(prevArr: unknown[], next: unknown[], keyName: string | n
 function updatePath(current: Record<PropertyKey, unknown>, path: unknown[]): void {
   if (path.length === 1) {
     let value = path[0];
-    // A root reconcile: diff `next` into the root object in place.
-    const rc = reconcileTag(value);
-    if (rc) {
-      if (sameShape(current, rc.next)) rc.run(current);
+    // A root-level in-place updater (reconcile/produce) runs its closure here.
+    const u = updaterTag(value);
+    if (u) {
+      u(current, ROOT);
       return;
     }
     // Merge a partial object (or updater→partial) into `current`.
@@ -301,12 +309,10 @@ function updatePath(current: Record<PropertyKey, unknown>, path: unknown[]): voi
   const key = path[0] as PropertyKey;
   if (path.length === 2) {
     let value = path[1];
-    // A keyed reconcile: diff `next` into current[key] in place (else replace).
-    const rc = reconcileTag(value);
-    if (rc) {
-      const prev = current[key];
-      if (sameShape(prev, rc.next)) rc.run(prev as Record<PropertyKey, unknown>);
-      else setProperty(current, key, rc.next);
+    // A keyed in-place updater (reconcile/produce) runs its closure here.
+    const u = updaterTag(value);
+    if (u) {
+      u(current, key);
       return;
     }
     if (typeof value === "function") value = (value as (p: unknown) => unknown)(current[key]);
@@ -333,8 +339,72 @@ function updatePath(current: Record<PropertyKey, unknown>, path: unknown[]): voi
 export function reconcile<T>(next: T, options?: { key?: string | null }): T {
   const key = options && "key" in options ? (options.key ?? null) : "id";
   const n = unwrap(next);
-  const cfg: ReconcileConfig = { next: n, run: (prev) => applyReconcile(prev, n, key) };
-  return { [$RECONCILE]: cfg } as unknown as T;
+  // Diff into a same-shaped target in place; otherwise plain-replace the slot
+  // (a root ROOT target can't be replaced — only diffed).
+  const apply: StoreUpdater = (parent, k) => {
+    const prev = updaterTarget(parent, k);
+    if (sameShape(prev, n)) applyReconcile(prev as Record<PropertyKey, unknown>, n, key);
+    else if (k !== ROOT) setProperty(parent, k, n);
+  };
+  return { [$UPDATER]: apply } as unknown as T;
+}
+
+// A WRITABLE view over a raw object, distinct from the read-only store `traps`:
+// every assignment/delete routes through `setProperty`, inheriting its dedup,
+// fine-grained bump, array-length/$KEYS handling, __proto__ guard, and the
+// speculation-scratch redirect — so `produce` needs no notification code of its
+// own. `get` recurses into a nested draft over the LIVE raw child (so a write to
+// `s.rows[0].x` targets the right object, preserving its proxy identity) and
+// returns array methods as-is (they run with `this` = draft, re-entering here).
+// It does NOT `track()` — a producer's reads must not create subscriptions.
+const draftTraps: ProxyHandler<Record<PropertyKey, unknown>> = {
+  get(target, key) {
+    if (key === $RAW) return target; // so unwrap(draft) resolves to the raw object
+    if (typeof key === "symbol") return Reflect.get(target, key);
+    const value = readField(target, key); // scratch-aware, no track
+    if (typeof value === "function") return value;
+    return isWrappable(value) ? wrapDraft(value) : value;
+  },
+  set(target, key, value) {
+    setProperty(target, key, value);
+    return true;
+  },
+  deleteProperty(target, key) {
+    setProperty(target, key, undefined);
+    return true;
+  },
+};
+
+function wrapDraft<T extends object>(value: T): T {
+  return new Proxy(value as Record<PropertyKey, unknown>, draftTraps) as T;
+}
+
+/**
+ * Immer-style mutable-draft sugar. Mutate the draft with plain assignments and
+ * array ops; each write routes through the fine-grained setter (only changed
+ * fields notify), inside one batch:
+ *
+ *   setStore(produce((s) => { s.user.name = "Grace"; s.rows.push(row); }));
+ *   setStore("rows", produce((rows) => { rows[0].status = "done"; }));
+ *
+ * Mutate-in-place: a matched nested object keeps its proxy identity (unlike
+ * replacing it). Provenance is coarse (one write for the whole produce path).
+ * For a keyed-list REORDER use `reconcile` — a same-length splice bumps only
+ * per-index nodes, not $KEYS, so `<For>` wouldn't re-diff. Don't retain the
+ * draft past `fn`.
+ */
+export function produce<T>(fn: (draft: T) => void): (prev: T) => T {
+  const apply: StoreUpdater = (parent, k) => {
+    const prev = updaterTarget(parent, k);
+    if (isWrappable(prev)) fn(wrapDraft(prev) as unknown as T);
+    else throw new Error(`pimas store: produce() target at "${String(k)}" is not an object.`);
+  };
+  // A tagged FUNCTION: typed as an updater so `T` infers from the setter slot
+  // (draft-only generics can't infer). updatePath detects the tag and runs
+  // `apply` in place — the body is never invoked as an updater.
+  const tagged = (((prev: T) => prev) as ((prev: T) => T) & { [$UPDATER]: StoreUpdater });
+  tagged[$UPDATER] = apply;
+  return tagged;
 }
 
 export type Store<T> = T;
