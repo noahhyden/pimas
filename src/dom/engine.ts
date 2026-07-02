@@ -8,6 +8,7 @@
  * component code runs against either, which is what makes SSR additive.
  */
 import { createRoot, untrack } from "../reactive/index.js";
+import { getEnv, setEnv } from "../reactive/reactive.js";
 
 /** Opaque to the engine; each backend defines its own node representation. */
 type BNode = any;
@@ -85,20 +86,24 @@ export type Component<P extends object = {}> = (props: P) => Child;
 export const Fragment = Symbol.for("pimas.Fragment");
 type ElementType = string | Component<any> | typeof Fragment;
 
-// The backend in effect for the current render pass. Set by `renderWith`; each
-// binding closes over the backend passed to it, so re-runs use the right one
-// even if this global is later switched (DOM ⇄ SSR).
-let currentBackend: RenderBackend | null = null;
+// The backend in effect for the current render pass lives in the reactive core's
+// ambient "env" (getEnv/setEnv). Storing it there — rather than in a private
+// global here — means the core captures it onto every node at creation and
+// RESTORES it while that node recomputes. So a computation that builds nodes (a
+// `<For>` memo, a re-run component) recomputes against the backend it was built
+// under, even when a different backend is globally current at flush time. That's
+// what lets the claim/hydrate backend and the DOM backend coexist on one page.
 
 export function setDefaultBackend(backend: RenderBackend): void {
-  if (currentBackend === null) currentBackend = backend;
+  if (getEnv() == null) setEnv(backend);
 }
 
 function activeBackend(): RenderBackend {
-  if (currentBackend === null) {
+  const b = getEnv();
+  if (b == null) {
     throw new Error("pimas: no active render backend — call render() or renderToString().");
   }
-  return currentBackend;
+  return b as RenderBackend;
 }
 
 /**
@@ -254,19 +259,34 @@ function normalize(b: RenderBackend, value: Child): BNode[] {
 }
 
 /**
- * Mount `code` into `container` using `backend`, inside a disposable root. The
- * binding effects close over `backend`, so later re-runs ignore the global.
+ * Mount `code` into `container` using `backend`, inside a disposable root.
+ * `withBackend` sets the ambient backend for the initial build; the core then
+ * captures it onto each node so re-runs recompute under the same backend.
  * Returns the root's dispose function.
  */
 export function renderWith(backend: RenderBackend, code: () => Child, container: BNode): () => void {
-  const prev = currentBackend;
-  currentBackend = backend;
-  try {
-    return createRoot((dispose) => {
+  return withBackend(backend, () =>
+    createRoot((dispose) => {
       insert(backend, container, code());
       return dispose;
-    });
+    }),
+  );
+}
+
+/**
+ * Run `fn` with `backend` as the active backend (stored in the reactive core's
+ * ambient env), restoring the previous one after. Because the core captures the
+ * env onto every node created here and restores it during that node's recompute,
+ * a binding that later rebuilds a component or a `<For>` row does so under the
+ * SAME backend — not whatever is globally current at flush time. Scoped +
+ * restored, so a page mixing backends (a claimed island and a normally-rendered
+ * one) stays correct: each node recomputes in its own backend.
+ */
+export function withBackend<T>(backend: RenderBackend, fn: () => T): T {
+  const prev = setEnv(backend);
+  try {
+    return fn();
   } finally {
-    currentBackend = prev;
+    setEnv(prev);
   }
 }

@@ -52,6 +52,12 @@ interface Reactive<T = any> {
   /** Error handler installed at this scope (a boundary). Walked up the owner
    *  chain like `context`; lazily created — only boundary nodes carry one. */
   errorHandler?: (err: unknown) => void;
+  /** Ambient execution environment (the render backend) captured when this node
+   *  was created, and re-established while its `fn` recomputes. A computation
+   *  that BUILDS nodes (e.g. a `<For>` memo) must recompute against the backend it
+   *  was built under — not whatever is globally current at flush time. Opaque to
+   *  the core; the DOM layer stores its backend here via `getEnv`/`setEnv`. */
+  env?: unknown;
 }
 
 // ── Globals ──────────────────────────────────────────────────────────────
@@ -60,6 +66,10 @@ interface Reactive<T = any> {
 let currentObserver: Reactive | null = null;
 /** The current ownership scope (for disposal of nested computations). */
 let currentOwner: Reactive | null = null;
+/** The current ambient execution environment (the DOM layer's render backend).
+ *  Captured onto each node at creation and restored while it recomputes — opaque
+ *  to the core (see `Reactive.env`). */
+let currentEnv: unknown = undefined;
 /** While > 0, writes mark + queue effects but don't flush until the outer exit. */
 let batchDepth = 0;
 /** Effects marked dirty/check, awaiting a flush. */
@@ -96,6 +106,7 @@ function makeNode<T>(fn: (() => T) | undefined, value: T | undefined, effect: bo
     sources: new Set(),
     observers: new Set(),
     owner: currentOwner,
+    env: currentEnv,
     owned: [],
     cleanups: [],
     equals: defaultEquals,
@@ -159,8 +170,10 @@ function update<T>(node: Reactive<T>): void {
 
   const prevObserver = currentObserver;
   const prevOwner = currentOwner;
+  const prevEnv = currentEnv;
   currentObserver = node;
   currentOwner = node;
+  currentEnv = node.env; // recompute under the backend this node was created with
   try {
     const next = node.fn!();
     if (!node.equals(node.value as T, next)) {
@@ -173,6 +186,7 @@ function update<T>(node: Reactive<T>): void {
   } finally {
     currentObserver = prevObserver;
     currentOwner = prevOwner;
+    currentEnv = prevEnv;
   }
 }
 
@@ -409,6 +423,21 @@ export function untrack<T>(fn: () => T): T {
 /** Register teardown for the current scope: runs before re-run and on disposal. */
 export function onCleanup(fn: () => void): void {
   if (currentOwner) currentOwner.cleanups.push(fn);
+}
+
+/** Read the current ambient execution environment (see `Reactive.env`). The DOM
+ *  layer stores its render backend here; internal plumbing, not a public API. */
+export function getEnv(): unknown {
+  return currentEnv;
+}
+
+/** Set the current ambient environment, returning the previous one (so callers
+ *  can save/restore). Nodes created while it is set capture it and recompute
+ *  under it. Internal plumbing for the render backends. */
+export function setEnv(env: unknown): unknown {
+  const prev = currentEnv;
+  currentEnv = env;
+  return prev;
 }
 
 /**

@@ -7,6 +7,7 @@
  *   3. A claimed handler fires on a REAL, trusted-ish event.
  */
 import { createSignal } from "pimas";
+import { For } from "pimas/flow";
 import { renderToString } from "pimas/server";
 import { claim } from "pimas/hydrate";
 import { test, expect } from "../runner";
@@ -70,6 +71,27 @@ test("a claimed handler fires on a real click", () => {
 
   btn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   expect(clicks).toBe(1);
+
+  dispose();
+  m.dispose();
+});
+
+test("a claimed <For> reorders adopted rows, preserving identity in a real browser", () => {
+  const a = { id: "a" }, b = { id: "b" }, c = { id: "c" };
+  const [items, setItems] = createSignal([a, b, c]);
+  const App = () => (
+    <ul>
+      <For each={items}>{(it: { id: string }) => <li>{() => it.id}</li>}</For>
+    </ul>
+  );
+  const m = serverMount(() => <App />);
+  const dispose = claim(() => <App />, m.container);
+  const liB = m.container.querySelectorAll("li")[1]!;
+
+  setItems([c, b, a]);
+  const after = [...m.container.querySelectorAll("li")];
+  expect(after.map((l) => l.textContent).join(",")).toBe("c,b,a");
+  expect(after[1] === liB).toBe(true); // moved in real DOM, not rebuilt
 
   dispose();
   m.dispose();

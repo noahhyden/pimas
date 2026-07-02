@@ -91,20 +91,31 @@ const alias = {
 // New fixture for the CLAIM/HYDRATE backend (#6, D#31): `pimas/hydrate` adopts
 // server DOM in place (reuse nodes + wire reactivity) instead of client-render-first
 // discarding it. Unlike renderer-free `pimas/resume` (the listener half), claim
-// RE-EXECUTES components, so it necessarily pulls the full renderer — budget ≈ the
-// `dom` render path (~1941 gz) + the plan-tree build/adopt walk (~110 gz) = 2052,
-// budget 2075. A separate subpath so it never touches the `pimas/dom` render budget.
+// RE-EXECUTES components, so it necessarily pulls the full renderer. A separate
+// subpath so it never touches the `pimas/dom` render budget.
+// Re-baselined for the reactive-core ENV mechanism (#6, claim slice 2): a node now
+// captures the ambient render backend at creation (`makeNode`) and `update()`
+// restores it while the node recomputes — so a computation that BUILDS nodes (a
+// <For> memo, a re-run component) recomputes under the backend it was built with,
+// not whatever is globally current at flush time. This is what makes claim's
+// control-flow reconcile correct AND fixes a latent mixed-backend hazard (a claimed
+// island + a rendered island on one page). The capture/restore lands in the
+// indivisible kernel, so every core consumer pays a little: signal 740→760,
+// full surface 1410→1425, dom 1950→2000 (also uses withBackend/getEnv/setEnv),
+// server 1900→1910, For 1400→1420, store 1700→1725. `hydrate: claim` 2075→2340
+// additionally carries slice 2 (materialize + live reconcile: insert/remove/
+// nextSibling bridging plan↔real DOM). Foundational, not bloat.
 const fixtures = {
-  "core: signal only": [`import { createSignal } from "pimas"; createSignal(0);`, 740],
-  "core: full surface": [`import * as R from "pimas"; globalThis.x = R;`, 1410],
-  "dom: render + h": [`import { render, h } from "pimas/dom"; globalThis.x = [render, h];`, 1950],
-  "server: renderToString": [`import { renderToString } from "pimas/server"; globalThis.x = renderToString;`, 1900],
+  "core: signal only": [`import { createSignal } from "pimas"; createSignal(0);`, 760],
+  "core: full surface": [`import * as R from "pimas"; globalThis.x = R;`, 1425],
+  "dom: render + h": [`import { render, h } from "pimas/dom"; globalThis.x = [render, h];`, 2000],
+  "server: renderToString": [`import { renderToString } from "pimas/server"; globalThis.x = renderToString;`, 1910],
   "resume: dispatcher": [`import { resume, registerHandler } from "pimas/resume"; globalThis.x = [resume, registerHandler];`, 900],
-  "hydrate: claim": [`import { claim } from "pimas/hydrate"; globalThis.x = claim;`, 2075],
+  "hydrate: claim": [`import { claim } from "pimas/hydrate"; globalThis.x = claim;`, 2340],
   "flow: Show + Switch": [`import { Show, Switch, Match } from "pimas/flow"; globalThis.x = [Show, Switch, Match];`, 900],
-  "flow: For (keyed)": [`import { For } from "pimas/flow"; globalThis.x = For;`, 1400],
+  "flow: For (keyed)": [`import { For } from "pimas/flow"; globalThis.x = For;`, 1420],
   "flow: ErrorBoundary": [`import { ErrorBoundary } from "pimas/flow"; globalThis.x = ErrorBoundary;`, 1000],
-  "store: createStore": [`import { createStore } from "pimas/store"; globalThis.x = createStore;`, 1700],
+  "store: createStore": [`import { createStore } from "pimas/store"; globalThis.x = createStore;`, 1725],
   "store: + reconcile": [`import { createStore, reconcile } from "pimas/store"; globalThis.x = [createStore, reconcile];`, 2050],
   "store: + produce": [`import { createStore, produce } from "pimas/store"; globalThis.x = [createStore, produce];`, 1925],
 };

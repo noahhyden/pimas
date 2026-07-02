@@ -12,6 +12,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createSignal } from "pimas";
+import { For, Show } from "pimas/flow";
 import { renderToString } from "pimas/server";
 import { claim } from "pimas/hydrate";
 
@@ -144,5 +145,117 @@ describe("claim — adopt server DOM in place", () => {
     const dispose = claim(() => <App />, container);
     dispose();
     expect(container.innerHTML).toBe("");
+  });
+});
+
+describe("claim — control flow (slice 2)", () => {
+  const texts = (c: Element) => [...c.querySelectorAll("li")].map((l) => l.textContent);
+
+  it("adopts a <For> first render without creating nodes", () => {
+    const a = { id: "a" }, b = { id: "b" }, c = { id: "c" };
+    const [items] = createSignal([a, b, c]);
+    const App = () => (
+      <ul>
+        <For each={items}>{(it: { id: string }) => <li>{() => it.id}</li>}</For>
+      </ul>
+    );
+    const container = serverInto(() => <App />);
+    const before = [...container.querySelectorAll("li")];
+
+    const createEl = vi.spyOn(document, "createElement");
+    const createText = vi.spyOn(document, "createTextNode");
+    const dispose = claim(() => <App />, container);
+
+    expect(createEl).not.toHaveBeenCalled();
+    expect(createText).not.toHaveBeenCalled();
+    expect([...container.querySelectorAll("li")].every((li, i) => li === before[i])).toBe(true);
+    expect(texts(container)).toEqual(["a", "b", "c"]);
+
+    createEl.mockRestore();
+    createText.mockRestore();
+    dispose();
+  });
+
+  it("reorders <For> rows after claim, reusing the SAME adopted nodes", () => {
+    const a = { id: "a" }, b = { id: "b" }, c = { id: "c" };
+    const [items, setItems] = createSignal([a, b, c]);
+    const App = () => (
+      <ul>
+        <For each={items}>{(it: { id: string }) => <li>{() => it.id}</li>}</For>
+      </ul>
+    );
+    const container = serverInto(() => <App />);
+    const dispose = claim(() => <App />, container);
+    const liB = container.querySelectorAll("li")[1]!; // b's adopted node
+
+    setItems([c, b, a]);
+    const after = [...container.querySelectorAll("li")];
+    expect(after.map((l) => l.textContent)).toEqual(["c", "b", "a"]);
+    expect(after[1]).toBe(liB); // moved, not rebuilt — identity preserved
+
+    dispose();
+  });
+
+  it("materializes a NEW <For> row (created post-adoption) and keeps it reactive", () => {
+    const a = { id: "a" }, b = { id: "b" };
+    const [items, setItems] = createSignal<Array<{ id: string }>>([a, b]);
+    const [suffix, setSuffix] = createSignal("");
+    const App = () => (
+      <ul>
+        <For each={items}>{(it: { id: string }) => <li>{() => it.id + suffix()}</li>}</For>
+      </ul>
+    );
+    const container = serverInto(() => <App />);
+    const dispose = claim(() => <App />, container);
+    const liA = container.querySelectorAll("li")[0]!;
+
+    const c = { id: "c" };
+    setItems([a, b, c]); // append — no server DOM to adopt, must materialize
+    expect(texts(container)).toEqual(["a", "b", "c"]);
+    expect(container.querySelectorAll("li")[0]).toBe(liA); // survivors kept
+
+    setSuffix("!"); // the freshly materialized row must be reactive too
+    expect(texts(container)).toEqual(["a!", "b!", "c!"]);
+
+    dispose();
+  });
+
+  it("removes a <For> row from the real DOM after claim", () => {
+    const a = { id: "a" }, b = { id: "b" }, c = { id: "c" };
+    const [items, setItems] = createSignal([a, b, c]);
+    const App = () => (
+      <ul>
+        <For each={items}>{(it: { id: string }) => <li>{() => it.id}</li>}</For>
+      </ul>
+    );
+    const container = serverInto(() => <App />);
+    const dispose = claim(() => <App />, container);
+    const liA = container.querySelectorAll("li")[0]!;
+
+    setItems([a, c]); // drop b
+    expect(texts(container)).toEqual(["a", "c"]);
+    expect(container.querySelectorAll("li").length).toBe(2);
+    expect(container.querySelectorAll("li")[0]).toBe(liA);
+
+    dispose();
+  });
+
+  it("toggles a <Show> branch after claim", () => {
+    const [open, setOpen] = createSignal(true);
+    const App = () => (
+      <div>
+        <Show when={open}>{() => <p class="body">shown</p>}</Show>
+      </div>
+    );
+    const container = serverInto(() => <App />);
+    expect(container.querySelector("p.body")).toBeTruthy();
+
+    const dispose = claim(() => <App />, container);
+    setOpen(false);
+    expect(container.querySelector("p.body")).toBeNull(); // branch removed from real DOM
+    setOpen(true);
+    expect(container.querySelector("p.body")).toBeTruthy(); // re-materialized
+
+    dispose();
   });
 });
