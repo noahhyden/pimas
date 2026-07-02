@@ -240,6 +240,38 @@ describe("claim — control flow (slice 2)", () => {
     dispose();
   });
 
+  it("delivers a ref the REAL adopted node, not a plan node (slice 3a)", () => {
+    let captured: unknown = null;
+    const App = () => <div class="host" ref={(n: unknown) => (captured = n)}>x</div>;
+    const container = serverInto(() => <App />);
+    const real = container.querySelector("div.host")!;
+
+    claim(() => <App />, container);
+    expect(captured).toBe(real); // the adopted server node — a real Element, usable
+    expect(captured instanceof HTMLElement).toBe(true);
+  });
+
+  it("delivers a ref on a row created post-adoption", () => {
+    const a = { id: "a" };
+    const [items, setItems] = createSignal<Array<{ id: string }>>([a]);
+    const refs: Record<string, unknown> = {};
+    const App = () => (
+      <ul>
+        <For each={items}>
+          {(it: { id: string }) => <li ref={(n: unknown) => (refs[it.id] = n)}>{() => it.id}</li>}
+        </For>
+      </ul>
+    );
+    const container = serverInto(() => <App />);
+    claim(() => <App />, container);
+    expect(refs.a).toBe(container.querySelector("li")); // adopted row's ref
+
+    setItems([a, { id: "b" }]); // new row materialized post-adoption
+    const liB = container.querySelectorAll("li")[1]!;
+    expect(refs.b).toBe(liB); // fired with the materialized real node
+    expect(refs.b instanceof HTMLElement).toBe(true);
+  });
+
   it("toggles a <Show> branch after claim", () => {
     const [open, setOpen] = createSignal(true);
     const App = () => (

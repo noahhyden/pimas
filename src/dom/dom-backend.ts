@@ -32,6 +32,9 @@ export const domBackend: RenderBackend = {
   isNode(value) {
     return value instanceof Node;
   },
+  ref(el, callback) {
+    callback(el); // node is built (detached); onMount is the post-insertion hook
+  },
   setText(node, value) {
     (node as Text).data = value;
   },

@@ -39,6 +39,10 @@ function recordingBackend(inner: RenderBackend, log: string[]): RenderBackend {
       log.push("an");
       return inner.anchor();
     },
+    ref(el, callback) {
+      log.push("rf");
+      inner.ref(el, callback);
+    },
     setText(node, value) {
       log.push(`sx:${value}`);
       inner.setText(node, value);

@@ -29,14 +29,14 @@
  * DOM bails the whole tree and degrades to a normal client render — never a
  * corrupted adoption. NO real DOM is mutated until the entire tree has matched.
  *
- * Slice 1 scope: static intrinsic elements, static attributes (left untouched —
- * already in the server HTML), DYNAMIC attributes/styles (`class={() => …}`),
- * event handlers, and reactive text children that are the sole dynamic content of
- * their slot (`<span>{() => n()}</span>`). OUT (later slices): control flow
- * (<Show>/<For>/<Switch>), adjacent static+dynamic text (`count: {() => n()}` —
- * the browser coalesces the two server text nodes), `ref`, and subtree-granular
- * fallback. `ref`/`onMount` receive plan nodes, not live DOM — don't use them in
- * a claimed subtree yet.
+ * Handles: static intrinsic elements, static attributes (left untouched — already
+ * in the server HTML), DYNAMIC attributes/styles (`class={() => …}`), event
+ * handlers, reactive text children (`<span>{() => n()}</span>`), CONTROL FLOW
+ * (<Show>/<For>/<Switch> — reorder/append/remove against the adopted DOM, slice 2),
+ * and `ref` (deferred to fire with the real ADOPTED node, not the plan node —
+ * slice 3a). OUT (remaining slices): adjacent static+dynamic text (`count:
+ * {() => n()}` — the browser coalesces the two server text nodes → desync →
+ * whole-tree fallback), and subtree-granular fallback.
  */
 import { createRoot, createEffect } from "../reactive/index.js";
 import { renderWith, type Child, type Handler } from "./engine.js";
@@ -57,6 +57,9 @@ interface ClaimNode {
   pendingAttrs?: Map<string, unknown>;
   pendingStyles?: Map<string, string>;
   listeners?: Array<[string, Handler]>;
+  /** `ref` callbacks, fired with the REAL adopted/materialized node — never the
+   *  plan node — once `.dom` is bound. */
+  refs?: Array<(node: Node) => void>;
 }
 
 // True while the current setAttr/setStyle originates from a binding EFFECT (a
@@ -78,6 +81,12 @@ const claimBackend: RenderBackend = {
   text: (value) => ({ kind: 2, children: [], dom: null, pendingText: String(value) }),
   anchor: () => ({ kind: 3, children: [], dom: null }),
   isNode: (value) => typeof value === "object" && value !== null && "kind" in (value as object),
+
+  ref(node, callback) {
+    const n = node as ClaimNode;
+    if (n.dom) callback(n.dom); // already bound (a post-adoption node) → fire now
+    else (n.refs ??= []).push(callback as (node: Node) => void); // defer to adoption
+  },
 
   setText(node, value) {
     const n = node as ClaimNode;
@@ -206,6 +215,7 @@ function materialize(node: ClaimNode): Node {
     for (const child of node.children) dom.appendChild(materialize(child));
   }
   node.dom = dom;
+  if (node.refs) for (const r of node.refs) r(dom);
   return dom;
 }
 
@@ -218,6 +228,7 @@ function flushAll(plan: ClaimNode): void {
     if (child.pendingStyles) for (const [k, v] of child.pendingStyles) domBackend.setStyle(dom, k, v);
     if (child.listeners) for (const [t, h] of child.listeners) domBackend.listen(dom, t, h);
     if (child.kind === 1) flushAll(child);
+    if (child.refs) for (const r of child.refs) r(dom); // fire refs with the ADOPTED node
   }
 }
 

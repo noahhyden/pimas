@@ -102,16 +102,18 @@ const alias = {
 // island + a rendered island on one page). The capture/restore lands in the
 // indivisible kernel, so every core consumer pays a little: signal 740→760,
 // full surface 1410→1425, dom 1950→2000 (also uses withBackend/getEnv/setEnv),
-// server 1900→1910, For 1400→1420, store 1700→1725. `hydrate: claim` 2075→2340
+// server 1900→1910, For 1400→1420, store 1700→1725. `hydrate: claim` 2075→2375
 // additionally carries slice 2 (materialize + live reconcile: insert/remove/
-// nextSibling bridging plan↔real DOM). Foundational, not bloat.
+// nextSibling bridging plan↔real DOM) and slice 3a (deferred `ref` firing with the
+// adopted node; a `ref` op is now on the RenderBackend, +~1 gz to dom/server too,
+// absorbed in their bumps). Foundational, not bloat.
 const fixtures = {
   "core: signal only": [`import { createSignal } from "pimas"; createSignal(0);`, 760],
   "core: full surface": [`import * as R from "pimas"; globalThis.x = R;`, 1425],
   "dom: render + h": [`import { render, h } from "pimas/dom"; globalThis.x = [render, h];`, 2000],
   "server: renderToString": [`import { renderToString } from "pimas/server"; globalThis.x = renderToString;`, 1910],
   "resume: dispatcher": [`import { resume, registerHandler } from "pimas/resume"; globalThis.x = [resume, registerHandler];`, 900],
-  "hydrate: claim": [`import { claim } from "pimas/hydrate"; globalThis.x = claim;`, 2340],
+  "hydrate: claim": [`import { claim } from "pimas/hydrate"; globalThis.x = claim;`, 2375],
   "flow: Show + Switch": [`import { Show, Switch, Match } from "pimas/flow"; globalThis.x = [Show, Switch, Match];`, 900],
   "flow: For (keyed)": [`import { For } from "pimas/flow"; globalThis.x = For;`, 1420],
   "flow: ErrorBoundary": [`import { ErrorBoundary } from "pimas/flow"; globalThis.x = ErrorBoundary;`, 1000],

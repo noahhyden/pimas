@@ -67,6 +67,9 @@ export const stringBackend: RenderBackend = {
   isNode(value) {
     return typeof value === "object" && value !== null && "kind" in (value as object);
   },
+  ref() {
+    // No live node on the server — a ref has nothing meaningful to receive.
+  },
   setText(node, value) {
     (node as SText).value = value;
   },

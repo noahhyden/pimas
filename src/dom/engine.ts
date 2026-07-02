@@ -50,6 +50,10 @@ export interface RenderBackend {
   /** A stable position marker (DOM comment) a dynamic binding inserts before. */
   anchor(): BNode;
   isNode(value: unknown): boolean;
+  /** Deliver a `ref` callback the element it refers to. DOM: call it now (the node
+   *  is built, though not yet inserted). SSR: no-op. Claim: defer until the real
+   *  server node is adopted, then call it with THAT node. */
+  ref(el: BNode, callback: (node: BNode) => void): void;
   setText(node: BNode, value: string): void;
   insert(parent: BNode, node: BNode, before: BNode | null): void;
   remove(parent: BNode, node: BNode): void;
@@ -150,7 +154,11 @@ function createWith(b: RenderBackend, type: ElementType, props: Props, children:
 
 function setProp(b: RenderBackend, el: BNode, key: string, value: unknown): void {
   if (key === "ref") {
-    if (typeof value === "function") (value as (e: BNode) => void)(el);
+    // Route through the backend rather than calling the callback directly: the DOM
+    // backend fires it now (with the freshly built node), the claim backend DEFERS
+    // it until the real server node is adopted (a plan node would be useless), and
+    // the string backend ignores it (SSR has no live node).
+    if (typeof value === "function") b.ref(el, value as (node: BNode) => void);
     return;
   }
   if (key.length > 2 && key[0] === "o" && key[1] === "n") {
