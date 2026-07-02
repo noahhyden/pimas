@@ -33,10 +33,11 @@
  * in the server HTML), DYNAMIC attributes/styles (`class={() => …}`), event
  * handlers, reactive text children (`<span>{() => n()}</span>`), CONTROL FLOW
  * (<Show>/<For>/<Switch> — reorder/append/remove against the adopted DOM, slice 2),
- * and `ref` (deferred to fire with the real ADOPTED node, not the plan node —
- * slice 3a). OUT (remaining slices): adjacent static+dynamic text (`count:
- * {() => n()}` — the browser coalesces the two server text nodes → desync →
- * whole-tree fallback), and subtree-granular fallback.
+ * `ref` (deferred to fire with the real ADOPTED node, not the plan node — slice 3a),
+ * and adjacent text pieces the parser COALESCED into one server node (`{a}{sep}{b}`
+ * → split back apart via `splitText`, slice 3b). OUT (remaining): subtree-granular
+ * fallback, and D4 (restore from the serialized capture table without re-executing
+ * components — needs the compiler; claim re-executes today).
  */
 import { createRoot, createEffect } from "../reactive/index.js";
 import { renderWith, type Child, type Handler } from "./engine.js";
