@@ -1,0 +1,28 @@
+name: notify-consumers
+
+# On every push to main, tell downstream consumers to re-run their pimas canary
+# against this exact SHA. von-neumann/frontend links pimas via a file: symlink to
+# this working tree, so a push here is what can break it — this closes the loop so
+# a regression is caught per-push instead of waiting for the consumer's nightly run.
+#
+# Requires a repo secret VONNEUMANN_DISPATCH_TOKEN: a fine-grained PAT scoped to
+# noahhyden/von-neumann with "Contents: read" + "Metadata: read" and the
+# repository-dispatch permission (Actions/Contents write is sufficient). The default
+# GITHUB_TOKEN cannot dispatch to another repo, so a PAT (or GitHub App) is needed.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger von-neumann pimas-canary at this SHA
+        env:
+          GH_TOKEN: ${{ secrets.VONNEUMANN_DISPATCH_TOKEN }}
+        run: |
+          gh api repos/noahhyden/von-neumann/dispatches \
+            -f event_type=pimas-canary \
+            -F "client_payload[pimas_sha]=${GITHUB_SHA}"
