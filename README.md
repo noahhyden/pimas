@@ -22,6 +22,7 @@ tree-shaken away (every entry is pure ESM + `"sideEffects": false`).
 | `pimas/agent` | 🔬 **experimental** — expose the reactive graph to an AI agent: subscribe to live state (L1), causal provenance (L2), deterministic what-if `speculate` (L3). **Headless.** | the core |
 | `pimas/agent/webmcp` | 🔬 **experimental** — project a bridge onto the WebMCP browser API (`document.modelContext` tools). | `pimas/agent` |
 | `pimas/resume` | 🔬 **experimental** — `resume()` client dispatcher that wires a server-rendered tree's serialized handlers to live events **without re-running components**. Renderer-free. | the zero-dep wire contract only |
+| `pimas/hydrate` | 🔬 **experimental** — `claim()` **adopts** the server-rendered DOM in place (reuse nodes + wire reactivity) instead of client-render-first discarding it. The *state* half of resumability (`resume` is the *listener* half). | the renderer |
 | `pimas/compiler` | 🔬 **experimental**, build-time only — Phase A thunk-eraser (`{count()}` → `{() => count()}`) as an `enforce:"pre"` Vite plugin. Uses `typescript` (optional peer) as a parser; never in a runtime bundle. | — |
 | `pimas/jsx-runtime`, `pimas/jsx-dev-runtime` | automatic JSX runtime for TS's `react-jsx` transform | the renderer |
 
@@ -80,7 +81,7 @@ render(() => <Counter />, document.body); // only the text node updates on click
 | **6 — Agent-native** | expose the reactive graph to an AI agent — subscribe (L1), causal provenance (L2), deterministic what-if `speculate` (L3), WebMCP projection; proven on a real HTTP stack | 🔬 exploration |
 
 Real-browser tests live in `browser-test/` (`npm run test:browser`, drives a real Chrome;
-168 vitest + 21 browser tests green). Architecture rationale for every choice is in
+174 vitest + 24 browser tests green). Architecture rationale for every choice is in
 [`DECISIONS.md`](DECISIONS.md); the phase tracker is [issue #1](../../issues/1).
 
 ### Phase 5
@@ -121,9 +122,15 @@ Real-browser tests live in `browser-test/` (`npm run test:browser`, drives a rea
   is a direct synchronous flush — timing is byte-for-byte unchanged, so `renderToString` and post-write DOM
   reads stay correct; deferral is strictly opt-in. `flushSync()` forces a drain when a deferred scheduler is
   installed. (D#47)
-- **Still deferred** (tracked in issues): compiler Phase B (templates) / Phase D (D2+ lazy handler chunks,
-  live-state resume) and the claim/hydrate backend (#6/#12) — bundler/site-repo-coupled or trigger-gated on a
-  dogfood target.
+- **Claim/hydrate backend (`pimas/hydrate`, #6)** — `claim(code, container)` **adopts** the server-rendered
+  DOM in place (reuses nodes, wires reactivity + listeners) instead of client-render-first discarding it — the
+  *state* half of resumability (`resume` is the *listener* half). Motivated by measuring klarum's showcase
+  throw away **55.8 KB** of server HTML and recreate the tree. Slice 1 (static elements, dynamic attrs, event
+  handlers, reactive text; correctness-first fallback to a client render on any desync) is real-browser proven;
+  control flow / `ref` / adjacent-text are later slices. The engine and both existing backends are unchanged.
+  (D#48)
+- **Still deferred** (tracked in issues): compiler Phase B (templates — reconsidered as marginal under the
+  static-first model) / Phase D (D2+ lazy handler chunks) and the claim backend's later slices (#6/#12).
 
 ### Agent-native (exploration — issue [#13](../../issues/13), rationale in [`AGENT-NATIVE.md`](AGENT-NATIVE.md))
 

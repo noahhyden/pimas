@@ -676,3 +676,30 @@ site edit afterward — microtask flushing is an opt-in a site adopts deliberate
 a production site unprompted; the win is modest (coalesces only multi-write bursts, e.g. the agent reset's
 3 writes→1 flush). The definitive N→1 proof lives in-repo: 3 real-browser fixtures with a genuine
 `queueMicrotask` (21 browser tests). 5 vitest + 3 browser tests. Commits 8a5b73c, 8dd3147.
+
+### 48. Claim/hydrate backend — adopt server DOM in place (#6 / D#31, slice 1)
+Client-render-first (D#29) discards the server HTML (`container.textContent = ""`) and rebuilds every node.
+Dogfood measurement made the cost concrete: klarum's `/showcase/` ships **55.8 KB of server island HTML that
+boot.ts throws away**, replaced by a 23.8 KB client render. `pimas/hydrate` `claim(code, container)` instead
+ADOPTS the server DOM — reuse the nodes, wire reactive bindings + listeners in place. This is the STATE half of
+resumability; `pimas/resume` (D#44) is the renderer-free LISTENER half. Claim is the superset for a hydrated
+subtree (wires both state and listeners from live closures) — they must not both run on one root.
+**Key design constraint:** the engine builds BOTTOM-UP (a child + its binding effects exist before the parent's
+`createWith`; outermost insert is last — locked by test/create-order), so a Solid-style linear hydration cursor
+in `element()`/`text()` is impossible. Instead the claim backend builds a lightweight PLAN TREE (plain objects,
+zero real DOM, identical in shape+order to the string backend's SNode tree by construction); binding effects
+created during the build subscribe and first-run into BUFFERS on the still-unbound plan nodes. A single top-down
+walk then matches each plan node to its server node, binds `.dom`, and flushes the buffers. Because the engine
+threads the backend `b` through each binding closure (engine.ts:88-91), a later signal write re-runs the same
+effect → `claimBackend.setText` → the adopted node's `.data` — no node created, identity preserved, even though
+the global backend is restored to DOM after the build. `setAttr` gates on `dom===null` (build-time static→skip /
+dynamic→buffer) vs bound (live update), NOT on the `inEffect` flag alone (a re-run has `inEffect=false` but must
+still apply). Engine and both existing backends UNCHANGED → every prior test + the create-order invariant hold.
+Correctness-first: any structural desync bails the whole tree to a normal client render (today's behavior),
+mutating no real DOM until the entire tree has matched. Slice 1 = static elements, static attrs (untouched),
+dynamic attrs/styles, event handlers, reactive text children. OUT (later slices): control flow (<Show>/<For> —
+multi-node keyed adoption), adjacent static+dynamic text (the browser coalesces the two server text nodes),
+`ref`/`onMount` (receive plan nodes, not live DOM), subtree-granular fallback. New `src/dom/claim.ts` + a
+separate `pimas/hydrate` subpath (never touches the `pimas/dom` render budget; 2052 gz = render path + ~110 gz
+walk, since claim re-executes components — unlike renderer-free resume). 6 vitest + 3 real-browser tests (node
+identity / no createElement, in-place text mutation, live handler, dynamic attr, desync fallback). Commit a0a4e35.
