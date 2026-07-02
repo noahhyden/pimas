@@ -666,6 +666,13 @@ callback can't wedge future flushes. `setScheduler` returns the previous schedul
 `scheduler: fn|null` (not a default identity arrow) so the common path stays a direct call and the seam costs
 the floor only a branch. Size re-baseline (documented in `size.mjs`): kernel indirection → signal 725→740,
 For 1375→1400, store 1675→1700; full surface 1325→1410 (the two exports, tree-shaken when unused). Dogfood:
-klarum-landing (19 routes) + noahhyden.com (5 routes) both rebuild clean against it — default-sync is
-transparent to existing consumers; activating the microtask scheduler on klarum's per-tick store-write demos
-(e.g. `analytics.tsx`) is the next step. 5 new tests. Commit 8a5b73c.
+klarum-landing (19 routes) + noahhyden.com (5 routes) both rebuild clean against it (default-sync is
+transparent). Went further — wired `setScheduler((f)=>queueMicrotask(f))` into klarum's single client entry
+(`islands/boot.ts`; SSR is a separate Node process, so prerender stays sync) and drove the `/showcase/` AI
+Assistant demo in a real browser: islands mount, no errors, reactive updates repaint under deferred flushing.
+(A red herring — the draft input not clearing on send — turned out to be pre-existing: klarum's `value={draft()}`
+is a non-reactive one-time read, not a thunk, so it was never bound; unrelated to the scheduler.) Reverted the
+site edit afterward — microtask flushing is an opt-in a site adopts deliberately, not something to commit into
+a production site unprompted; the win is modest (coalesces only multi-write bursts, e.g. the agent reset's
+3 writes→1 flush). The definitive N→1 proof lives in-repo: 3 real-browser fixtures with a genuine
+`queueMicrotask` (21 browser tests). 5 vitest + 3 browser tests. Commits 8a5b73c, 8dd3147.
