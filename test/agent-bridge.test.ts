@@ -204,6 +204,63 @@ describe("agent bridge — L1 subscribe (issue #13)", () => {
     bridge.dispose();
   });
 
+  it("commitPlan applies an approved scenario for real and returns committed state (L3)", () => {
+    const [s, set] = createStore({ rows: [{ id: "a", n: 1 }, { id: "b", n: 2 }] });
+    const total = createMemo(() => s.rows.reduce((x, r) => x + r.n, 0));
+    const bridge = createAgentBridge((r) => {
+      r.expose("total", () => total());
+      r.action("setN", (i, v) => set("rows", i as number, "n", v));
+    });
+
+    // Preview, then commit the SAME steps.
+    const preview = bridge.speculatePlan([["setN", 0, 10], ["setN", 1, 20]]);
+    expect(preview).toEqual({ total: 30 });
+    expect(total()).toBe(3); // preview didn't commit
+
+    const committed = bridge.commitPlan([["setN", 0, 10], ["setN", 1, 20]]);
+    expect(committed).toEqual({ total: 30 });
+    expect(total()).toBe(30); // NOW it's real
+    expect(bridge.snapshot().state).toEqual({ total: 30 });
+
+    bridge.dispose();
+  });
+
+  it("commitPlan records ONE coalesced L2 record, not N per-step (vs separate call()s)", () => {
+    const record = (make: () => any) => {
+      const [s, set] = createStore({ rows: [{ id: "a", n: 1 }, { id: "b", n: 2 }] });
+      const total = createMemo(() => s.rows.reduce((x, r) => x + r.n, 0));
+      const bridge = createAgentBridge(
+        (r) => {
+          r.expose("total", () => total());
+          r.action("setN", (i, v) => set("rows", i as number, "n", v));
+        },
+        { writeTap: (rec) => onStoreWrite((e) => rec(e.path.join("."))) },
+      );
+      make.call({ bridge });
+      const h = bridge.history();
+      bridge.dispose();
+      return h;
+    };
+
+    // Two separate calls → two fragmented records.
+    let b1!: ReturnType<typeof createAgentBridge>;
+    const separate = record(function (this: { bridge: typeof b1 }) {
+      this.bridge.call("setN", 0, 10);
+      this.bridge.call("setN", 1, 20);
+    });
+    expect(separate.length).toBe(2);
+    expect(separate.map((r) => r.action)).toEqual(["setN", "setN"]);
+
+    // commitPlan → ONE record covering the whole scenario.
+    const planned = record(function (this: { bridge: typeof b1 }) {
+      this.bridge.commitPlan([["setN", 0, 10], ["setN", 1, 20]]);
+    });
+    expect(planned.length).toBe(1);
+    expect(planned[0]!.action).toBe("plan");
+    expect(planned[0]!.changed).toEqual(["total"]); // one coalesced "changed" set
+    expect(planned[0]!.writes.sort()).toEqual(["rows.0.n", "rows.1.n"]); // both writes, one record
+  });
+
   it("captures L2 provenance for an ASYNC action after its awaited writes land", async () => {
     const [s, set] = createStore({ rows: [{ id: "a", status: "open" }, { id: "b", status: "open" }] });
     const openCount = createMemo(() => s.rows.filter((r) => r.status === "open").length);

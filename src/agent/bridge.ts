@@ -11,13 +11,14 @@
  *      action, computed against a shadow of the graph, WITHOUT committing.
  *      speculatePlan(steps) composes several writes in one shadow (a multi-factor
  *      scenario); speculateSweep(name, argsList) runs an independent what-if per
- *      arg-set (a sensitivity sweep) — the planning half of L3.
+ *      arg-set (a sensitivity sweep) — the planning half of L3. commitPlan(steps)
+ *      applies an approved plan FOR REAL as one coalesced action (preview↔commit).
  *
  * Headless (no DOM). Fine-grained: exposing `() => s.rows[3].status` subscribes
  * to exactly that store field. Field-level provenance (L2 `writes`) needs a
  * `writeTap` — wire `pimas/store`'s `onStoreWrite` in (see the option below).
  */
-import { createEffect, createRoot, untrack, speculate as coreSpeculate } from "../reactive/index.js";
+import { createEffect, createRoot, untrack, batch, speculate as coreSpeculate } from "../reactive/index.js";
 import type { Accessor } from "../reactive/index.js";
 
 /** A pushed event: a state delta (L1) or a causal record (L2). */
@@ -105,6 +106,11 @@ export interface AgentBridge {
   /** L3 sensitivity sweep: run one INDEPENDENT speculation of `actionName` per
    *  arg-set, returning the predicted exposed state at each point. Nothing commits. */
   speculateSweep(actionName: string, argsList: unknown[][]): Record<string, unknown>[];
+  /** L3 commit: apply an approved plan (previewed by `speculatePlan`) for REAL —
+   *  all steps in ONE batch, yielding ONE coalesced L2 record (`action:"plan"`),
+   *  not N fragmented per-step records. Returns the committed exposed state. The
+   *  preview↔commit mirror of `speculatePlan`. */
+  commitPlan(steps: Array<[string, ...unknown[]]>): Record<string, unknown>;
   /** Tear down every exposed subscription (disposes the root owner). */
   dispose(): void;
 }
@@ -279,6 +285,30 @@ export function createAgentBridge(setup: (r: AgentRegistrar) => void, opts: Agen
       // Each is a fresh shadow (so it never nests), and none commits.
       const fn = requireAction(actionName);
       return argsList.map((args) => coreSpeculate(() => void fn(...args), readAllExposed));
+    },
+    commitPlan(steps) {
+      // The commit mirror of speculatePlan: apply all steps FOR REAL in one batch
+      // (writes coalesce to a single flush) and record ONE coalesced L2 record —
+      // provenance for "applied scenario X", not N fragmented per-step records.
+      // Sync-pure, like speculatePlan. Reuses call()'s provenance machinery once.
+      const writes: string[] = [];
+      const stopTap = opts.writeTap?.((label) => writes.push(label));
+      const before = new Map(latest); // exposing effects update `latest` on flush
+      try {
+        batch(() => {
+          for (const [name, ...args] of steps) requireAction(name)(...args);
+        });
+      } catch (e) {
+        stopTap?.(); // partial writes may have landed; no coalesced record on throw
+        throw e;
+      }
+      stopTap?.();
+      const changed = [...latest.keys()].filter((k) => !Object.is(before.get(k), latest.get(k)));
+      lastCause = { action: "plan", args: steps, writes, changed };
+      causeLog.push(lastCause);
+      if (causeLog.length > historyLimit) causeLog.shift();
+      emit({ kind: "cause", action: "plan", args: steps, writes, changed });
+      return Object.fromEntries(latest);
     },
     dispose,
   };
