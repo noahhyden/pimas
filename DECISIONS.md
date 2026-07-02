@@ -703,3 +703,26 @@ multi-node keyed adoption), adjacent static+dynamic text (the browser coalesces 
 separate `pimas/hydrate` subpath (never touches the `pimas/dom` render budget; 2052 gz = render path + ~110 gz
 walk, since claim re-executes components — unlike renderer-free resume). 6 vitest + 3 real-browser tests (node
 identity / no createElement, in-place text mutation, live handler, dynamic attr, desync fallback). Commit a0a4e35.
+
+### 49. Reactive-core `env` seam — a computation recomputes under its creation backend (#6, claim slice 2)
+Claim slice 2 (adopt control flow — `<For>`/`<Show>`/`<Switch>` reorder/append/remove after adoption) surfaced
+a GENERAL reactive-core issue, not a claim detail. The engine reads the active backend from a module global;
+`renderWith`/`withBackend` set it only for the initial build and each effect's own `fn` run. But a `<For>` memo
+recomputes during the READING effect's **source-pull phase** (the 3-color CHECK resolution inside
+`updateIfNecessary`, engine `reactive.ts:145-150`) — which runs BEFORE the effect's `fn` — so it built rows
+against whatever backend was globally current at flush time (the DOM backend). The claim backend then couldn't
+reconcile those raw DOM nodes (`isNode` rejects them) and stringified them. Wrapping the effect `fn` in
+`withBackend` cannot fix this — the memo recompute is outside the fn. **Fix:** each node captures the ambient
+execution environment (`env`) at creation (`makeNode`), and `update()` restores it while the node recomputes
+(`reactive.ts`). The DOM layer stores its backend in that env via new core `getEnv`/`setEnv`; engine
+`activeBackend`/`setDefaultBackend`/`withBackend`/`renderWith` route through it (the engine's private
+`currentBackend` global is gone). So ANY node-building computation — a `<For>` memo, a re-run component —
+recomputes under the backend it was built with. Bonus: this fixes a **latent hazard** independent of claim — a
+claimed island and a normally-rendered island can now coexist on one page (each node recomputes in its own
+backend); the old global would have crossed them. claim.ts slice 2: a `live` latch (false during the adoption
+build → true after) + `ClaimNode.parent`; `insert`/`remove`/`nextSibling` bridge plan↔real DOM once live;
+`materialize()` builds a real subtree for a row created post-adoption; `setAttr`/`setStyle` buffer on
+`inEffect || live` so a fresh row's static attrs (no server HTML to adopt) still materialize. Size re-baseline
+(documented in size.mjs): the env capture/restore lands in the indivisible kernel — signal 740→760, dom
+1950→2000, For 1400→1420, store 1700→1725, full surface 1410→1425, server 1900→1910; hydrate 2075→2340
+(slice-2 reconcile/materialize). +5 vitest, +1 real-browser. Commit 4198360.

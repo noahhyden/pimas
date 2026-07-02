@@ -81,7 +81,7 @@ render(() => <Counter />, document.body); // only the text node updates on click
 | **6 — Agent-native** | expose the reactive graph to an AI agent — subscribe (L1), causal provenance (L2), deterministic what-if `speculate` (L3), WebMCP projection; proven on a real HTTP stack | 🔬 exploration |
 
 Real-browser tests live in `browser-test/` (`npm run test:browser`, drives a real Chrome;
-174 vitest + 24 browser tests green). Architecture rationale for every choice is in
+179 vitest + 25 browser tests green). Architecture rationale for every choice is in
 [`DECISIONS.md`](DECISIONS.md); the phase tracker is [issue #1](../../issues/1).
 
 ### Phase 5
@@ -125,12 +125,14 @@ Real-browser tests live in `browser-test/` (`npm run test:browser`, drives a rea
 - **Claim/hydrate backend (`pimas/hydrate`, #6)** — `claim(code, container)` **adopts** the server-rendered
   DOM in place (reuses nodes, wires reactivity + listeners) instead of client-render-first discarding it — the
   *state* half of resumability (`resume` is the *listener* half). Motivated by measuring klarum's showcase
-  throw away **55.8 KB** of server HTML and recreate the tree. Slice 1 (static elements, dynamic attrs, event
-  handlers, reactive text; correctness-first fallback to a client render on any desync) is real-browser proven;
-  control flow / `ref` / adjacent-text are later slices. The engine and both existing backends are unchanged.
-  (D#48)
+  throw away **55.8 KB** of server HTML and recreate the tree. Covers static elements, dynamic attrs, event
+  handlers, reactive text, **and control flow** (`<For>`/`<Show>`/`<Switch>` reorder/append/remove against the
+  adopted DOM); correctness-first fallback to a client render on any structural desync. All real-browser proven.
+  Enabled by a small reactive-core **`env` seam** — a computation recomputes under the backend it was created
+  with (so a `<For>` memo rebuilds through claim, not the DOM backend), which also lets claimed and rendered
+  islands coexist on one page. `ref`/adjacent-static+dynamic-text are the remaining slices. (D#48, D#49)
 - **Still deferred** (tracked in issues): compiler Phase B (templates — reconsidered as marginal under the
-  static-first model) / Phase D (D2+ lazy handler chunks) and the claim backend's later slices (#6/#12).
+  static-first model) / Phase D (D2+ lazy handler chunks) and the claim backend's remaining slices (#6/#12).
 
 ### Agent-native (exploration — issue [#13](../../issues/13), rationale in [`AGENT-NATIVE.md`](AGENT-NATIVE.md))
 
