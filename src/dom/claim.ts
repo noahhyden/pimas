@@ -187,6 +187,19 @@ function match(plan: ClaimNode): boolean {
       if (cur.nodeType !== 1 || (cur as Element).tagName.toLowerCase() !== child.tag) return false;
     } else if (child.kind === 2) {
       if (cur.nodeType !== 3) return false; // Text
+      // Adjacent JSX text pieces (`{a} sep {b}`) are distinct plan nodes, but the
+      // browser COALESCES them into one server Text node on parse. If this plan
+      // text is a proper prefix of the server node, split the node so each plan
+      // text binds to its own piece (and the remainder matches the next sibling).
+      const want = child.pendingText ?? "";
+      const data = (cur as Text).data;
+      if (data !== want) {
+        if (want !== "" && data.length > want.length && data.startsWith(want)) {
+          (cur as Text).splitText(want.length); // cur := prefix (== want); remainder := next sibling
+        } else {
+          return false; // genuine content divergence → bail to a client render
+        }
+      }
     } else {
       if (cur.nodeType !== 8) return false; // Comment (the <!----> anchor)
     }

@@ -240,6 +240,27 @@ describe("claim — control flow (slice 2)", () => {
     dispose();
   });
 
+  it("adopts adjacent text pieces the browser coalesced into one node (slice 3b)", () => {
+    // `{a}{sep}{b}` is three plan text nodes, but the server serializes them into
+    // one run that the HTML parser coalesces into a single Text node. claim splits
+    // that node back apart to match the plan.
+    const App = () => (
+      <span>
+        {"ACME"}
+        {" · p."}
+        {"3"}
+      </span>
+    );
+    const container = serverInto(() => <App />);
+    const span = container.querySelector("span")!;
+    expect(span.textContent).toBe("ACME · p.3");
+
+    const dispose = claim(() => <App />, container);
+    expect(container.querySelector("span")).toBe(span); // same element adopted
+    expect(span.textContent).toBe("ACME · p.3"); // content intact after any split
+    dispose();
+  });
+
   it("delivers a ref the REAL adopted node, not a plan node (slice 3a)", () => {
     let captured: unknown = null;
     const App = () => <div class="host" ref={(n: unknown) => (captured = n)}>x</div>;

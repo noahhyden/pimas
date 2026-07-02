@@ -76,6 +76,29 @@ test("a claimed handler fires on a real click", () => {
   m.dispose();
 });
 
+test("claim splits a coalesced text run to adopt adjacent pieces (slice 3b)", () => {
+  // A real browser coalesces `{a}{sep}{b}` into ONE server Text node on parse;
+  // claim must split it back to match the three plan text nodes. (happy-dom may
+  // not coalesce, so this case only truly bites in a real browser.)
+  const App = () => (
+    <span>
+      {"ACME"}
+      {" · p."}
+      {"3"}
+    </span>
+  );
+  const m = serverMount(() => <App />);
+  const span = m.container.querySelector("span")!;
+  expect(span.textContent).toBe("ACME · p.3");
+
+  const dispose = claim(() => <App />, m.container);
+  expect(m.container.querySelector("span") === span).toBe(true); // adopted, not rebuilt
+  expect(span.textContent).toBe("ACME · p.3");
+
+  dispose();
+  m.dispose();
+});
+
 test("a claimed <For> reorders adopted rows, preserving identity in a real browser", () => {
   const a = { id: "a" }, b = { id: "b" }, c = { id: "c" };
   const [items, setItems] = createSignal([a, b, c]);
