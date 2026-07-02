@@ -80,7 +80,7 @@ render(() => <Counter />, document.body); // only the text node updates on click
 | **6 — Agent-native** | expose the reactive graph to an AI agent — subscribe (L1), causal provenance (L2), deterministic what-if `speculate` (L3), WebMCP projection; proven on a real HTTP stack | 🔬 exploration |
 
 Real-browser tests live in `browser-test/` (`npm run test:browser`, drives a real Chrome;
-168 vitest + 18 browser tests green). Architecture rationale for every choice is in
+168 vitest + 21 browser tests green). Architecture rationale for every choice is in
 [`DECISIONS.md`](DECISIONS.md); the phase tracker is [issue #1](../../issues/1).
 
 ### Phase 5
