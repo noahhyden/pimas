@@ -132,11 +132,12 @@ Real-browser tests live in `browser-test/` (`npm run test:browser`, drives a rea
   with (so a `<For>` memo rebuilds through claim, not the DOM backend), which also lets claimed and rendered
   islands coexist on one page. Also handles `ref` (deferred to fire with the adopted node) and adjacent text
   the parser coalesced (`splitText` to rebind the pieces). (D#48, D#49, D#50)
-- **Dogfood — claim adopts the real klarum site.** Swapping klarum's island boot from `render()` to `claim()`
-  (branch `pimas-port`), every load-strategy island now **adopts the server DOM in place instead of discarding
-  and rebuilding it** — including the **~56 KB `/showcase/`** that was previously thrown away, plus the home
-  hero (its root `ref` → `getBoundingClientRect`) and `/pricing/` — and stays interactive after adoption
-  (real-Chrome verified). claim falls back to a client render on any structural desync, so the swap is safe. (D#50)
+- **Dogfood — claim adopts both real sites.** Swapping each site's island boot from `render()` to `claim()`,
+  every load-strategy island now **adopts the server DOM in place instead of discarding and rebuilding it**, and
+  stays interactive after adoption (real-Chrome verified). klarum: the **~56 KB `/showcase/`** (previously thrown
+  away), the home hero (root `ref` → `getBoundingClientRect`), `/pricing/`. noahhyden.com: `primitives-demo`
+  (increment updates the adopted node, autofocus ref fires, the coalesced `count = ` run is split & adopted).
+  claim falls back to a client render on any structural desync, so the swap is safe. (D#50)
 - **Still deferred** (tracked in issues): compiler Phase B (templates — reconsidered as marginal under the
   static-first model) / Phase D (D2+ lazy handler chunks; D4 = claim from the serialized capture-table, not just
   live closures) and claim's subtree-granular fallback (#6/#12).
