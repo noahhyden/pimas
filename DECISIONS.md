@@ -747,3 +747,20 @@ no JS errors). The boot swap is committed on klarum's `pimas-port` branch (d7b7c
 the owner); claim's whole-tree fallback keeps it safe on any not-yet-adoptable island. Remaining: subtree-
 granular fallback, and D4 (consume the resume capture-table so claim works from serialized captures, not just
 live closures). Size: hydrate 2340→2425. +3 vitest, +2 real-browser (182 vitest + 26 browser). Commits f2170ee, f4f32c4.
+
+### 51. Agent-native — multi-step + sweep `speculate` (the planning half of L3) (#13)
+After the claim/hydrate roadmap wins landed, the owner chose to push agent-native (#13). The surface (L1
+`createAgentBridge`, L3 `speculate`, L2 `onStoreWrite`/`explain`, `pimas/agent/webmcp`) was already built +
+validated (von-neumann `wall-live` quantitative model, pivi real HTTP), so the next step was the *unbuilt half*
+of the L3 thesis — "plan multi-step interactions by simulating them first" (AGENT-NATIVE.md) — which is exactly
+the activity the D#42 quantitative-model framing centers on: sensitivity **sweeps** and multi-factor
+**scenarios**. `bridge.speculate` only took a single action. Added `speculatePlan(steps)` (apply ALL steps in
+order against ONE shadow → composed after-state; **not** reducible to separate `speculate` calls, which each
+reset the shadow) and `speculateSweep(name, argsList)` (one INDEPENDENT top-level speculation per arg-set → the
+sweep; each a fresh shadow so it never trips the no-nested-speculation guard). Both ride the existing core
+`speculate(apply, read)` — **ZERO core change** — sharing an extracted `readAllExposed` projection. Pure
+what-ifs: nothing commits, and being non-actions they record no L2 causal history. Sync-pure-only, which is free
+for the target domain. Chose NOT to build the "model→pimas graph" helper (over-abstraction at N=1 — almost all of
+von-neumann's model file is domain logic, not boilerplate; wait for a 2nd model to reveal the real commonality)
+and NOT to expose L3 via WebMCP (D#42 parks WebMCP). +5 vitest (189 total); bridge is opt-in, off the hot-path
+floor, no budget change. Commit 3a2fe88.

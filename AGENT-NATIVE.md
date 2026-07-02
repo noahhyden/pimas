@@ -100,7 +100,9 @@ shadow. Design around it; don't pretend it's solved.
 - ✅ **L1** — `pimas/agent` `createAgentBridge` (expose/subscribe/call, push-on-change, zero core change).
 - ✅ **L3** — `speculate(apply, read)` in the core (shadow read/write, effects don't fire, free
   rollback), **plus store copy-on-write** (`speculationScratch` on the core) so hypothetical
-  *edits* work. Hot-path floor 679→698 gz; heavy logic tree-shakes.
+  *edits* work. Hot-path floor 679→698 gz; heavy logic tree-shakes. **+ the planning half** (D#51):
+  bridge `speculatePlan(steps)` composes a multi-factor scenario in one shadow, `speculateSweep(name,
+  argsList)` runs a sensitivity sweep — both zero core change, on the quantitative-model axis.
 - ✅ **L2** — `pimas/store` `onStoreWrite` + a bridge `CauseRecord` (`explain()` / `cause` event).
 - ✅ **WebMCP** — `pimas/agent/webmcp` `toWebMCP(bridge)` (actions→tools, state→`get_*` tools,
   `document.modelContext`, AbortSignal teardown, MCP content envelope).
