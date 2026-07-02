@@ -17,7 +17,7 @@
  * LISTENERS, not reactive-graph STATE. A resumed handler that reads a signal
  * sees a fresh default — full state-resume is later work needing the compiler.
  */
-import { STATE_SCRIPT_TYPE, type CaptureEntry } from "./wire.js";
+import { STATE_SCRIPT_TYPE, decode, type CaptureEntry } from "./wire.js";
 
 /** A resumed handler: receives the DOM event and the serialized capture bag. */
 export type ResumeHandler = (event: Event, capture: unknown[]) => void;
@@ -67,7 +67,7 @@ export function resume(opts: ResumeOptions = {}): () => void {
   const script = root.querySelector(`script[type="${STATE_SCRIPT_TYPE}"]`);
   if (script?.textContent) {
     try {
-      table = JSON.parse(script.textContent) as CaptureEntry[];
+      table = decode(script.textContent) as CaptureEntry[];
     } catch {
       console.warn("pimas resume: could not parse the state script — ignoring.");
     }

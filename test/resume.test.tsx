@@ -102,6 +102,25 @@ describe("resume — client dispatch (no component re-execution)", () => {
     container.remove();
   });
 
+  it("round-trips a rich capture (Date/Map) through the state script end-to-end", () => {
+    const when = new Date("2026-07-02T00:00:00.000Z");
+    const tags = new Map<string, number>([["a", 1]]);
+    const { container } = mount(() => <button onClick={desc("row#save", [when, tags])}>save</button>);
+
+    const seen: unknown[][] = [];
+    registerHandler("row#save", (_e, capture) => seen.push(capture));
+    const dispose = resume({ root: container });
+
+    container.querySelector("button")!.dispatchEvent(new Event("click", { bubbles: true }));
+
+    const [cap] = seen;
+    expect((cap![0] as Date).getTime()).toBe(when.getTime()); // Date survived
+    expect((cap![1] as Map<string, number>).get("a")).toBe(1); // Map survived
+
+    dispose();
+    container.remove();
+  });
+
   it("resolves the NEAREST ancestor's handler (delegation walk)", () => {
     const { container } = mount(() => (
       <div onClick={desc("outer")}>

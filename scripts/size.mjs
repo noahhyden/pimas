@@ -63,6 +63,12 @@ const alias = {
 // produce's writable draft traps) rides in a CLOSURE on the tag and tree-shakes
 // away — the "+ reconcile" (~+300 gz) and "+ produce" (~+190 gz) fixtures show
 // each opt-in cost. Opt-in, not bloat.
+// Re-baselined for the TYPE-TAGGED CODEC (#7 / resumability task 6, D#32): the
+// capture table + island props now round-trip undefined/NaN/±Inf/-0/bigint/
+// Date/Map/Set/RegExp via a JSON replacer/reviver in wire.ts. The DECODER ships
+// to every resumable page (resume 700→900); the ENCODER runs server-side
+// (server 1550→1900, also re-exports decode for island use). encode tree-shakes
+// OUT of the resume bundle (resume imports decode only). Foundational, not bloat.
 // Re-baselined for RESUMABILITY (#6/#30): the string backend's `listen` now
 // serializes handler DESCRIPTORS (emits `on:<type>` + a per-render capture table),
 // and `renderToString` flushes that table as an `application/pimas-state` script.
@@ -76,8 +82,8 @@ const fixtures = {
   "core: signal only": [`import { createSignal } from "pimas"; createSignal(0);`, 725],
   "core: full surface": [`import * as R from "pimas"; globalThis.x = R;`, 1325],
   "dom: render + h": [`import { render, h } from "pimas/dom"; globalThis.x = [render, h];`, 1950],
-  "server: renderToString": [`import { renderToString } from "pimas/server"; globalThis.x = renderToString;`, 1550],
-  "resume: dispatcher": [`import { resume, registerHandler } from "pimas/resume"; globalThis.x = [resume, registerHandler];`, 700],
+  "server: renderToString": [`import { renderToString } from "pimas/server"; globalThis.x = renderToString;`, 1900],
+  "resume: dispatcher": [`import { resume, registerHandler } from "pimas/resume"; globalThis.x = [resume, registerHandler];`, 900],
   "flow: Show + Switch": [`import { Show, Switch, Match } from "pimas/flow"; globalThis.x = [Show, Switch, Match];`, 900],
   "flow: For (keyed)": [`import { For } from "pimas/flow"; globalThis.x = For;`, 1375],
   "flow: ErrorBoundary": [`import { ErrorBoundary } from "pimas/flow"; globalThis.x = ErrorBoundary;`, 1000],

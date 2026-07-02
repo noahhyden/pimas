@@ -6,9 +6,12 @@
  * generating noahhyden.com's static HTML.
  */
 import { renderWith, STATE_SCRIPT_TYPE, type Child } from "../dom/engine.js";
+import { encode } from "../dom/wire.js";
 import { stringBackend, serialize, newRoot, beginCapture, collectCapture } from "./string-backend.js";
 
 export { STATE_SCRIPT_TYPE };
+// The type-tagged codec (D#32) — re-exported for island prop serialization (#7).
+export { encode, decode } from "../dom/wire.js";
 
 /**
  * Render `code` to an HTML string.
@@ -27,8 +30,7 @@ export function renderToString(code: () => Child): string {
   dispose();
   const table = collectCapture();
   if (table.length === 0) return html;
-  // Escape `<` so a captured string containing "</script>" can't break out of
-  // the tag; the result is still valid JSON (<).
-  const json = JSON.stringify(table).replace(/</g, "\\u003c");
-  return `${html}<script type="${STATE_SCRIPT_TYPE}">${json}</script>`;
+  // `encode` type-tags values JSON can't carry (Dates/Maps/typed rows round-trip)
+  // and escapes `<` so a captured "</script>" can't break out of the tag.
+  return `${html}<script type="${STATE_SCRIPT_TYPE}">${encode(table)}</script>`;
 }
