@@ -726,3 +726,24 @@ build → true after) + `ClaimNode.parent`; `insert`/`remove`/`nextSibling` brid
 (documented in size.mjs): the env capture/restore lands in the indivisible kernel — signal 740→760, dom
 1950→2000, For 1400→1420, store 1700→1725, full surface 1410→1425, server 1900→1910; hydrate 2075→2340
 (slice-2 reconcile/materialize). +5 vitest, +1 real-browser. Commit 4198360.
+
+### 50. Claim slices 3a/3b — `ref` + coalesced adjacent text; klarum dogfood realizes the 55.8 KB win (#6, D#31)
+The two remaining gaps to claim klarum's real islands, both found/closed by **dogfooding** the actual site
+(swapped `klarum-landing/site/src/islands/boot.ts` from `render()`+`textContent=""` to `claim()`).
+**3a — `ref`:** `ref` bypassed the backend (`setProp` called the callback directly with the built node), so under
+claim it would hand back a useless plan node — and worse, that's NOT a fall-back-safe desync: claim adopts, then
+`herocover`'s `wrapper.getBoundingClientRect()` throws (a silent home-page regression). Fix: a new
+`RenderBackend.ref(el, cb)` op — DOM fires it now (unchanged), string backend no-ops (SSR has no live node,
+previously fired with a string node), claim DEFERS it and fires with the REAL adopted/materialized node
+(flushAll / materialize). **3b — adjacent text:** `{a}{sep}{b}` in one element is 3 plan text nodes, but the
+parser COALESCES the serialized run into ONE server Text node, so positional match saw 1-vs-3 and bailed — this
+sank the 55.8 KB `/showcase/` (`components/demo/primitives.tsx` `{source} · p.{page}`). Fix (claim `match`):
+when a plan text's `pendingText` is a proper PREFIX of the server node, `splitText()` at the boundary so each
+plan text binds its own piece and the remainder matches the next sibling; exact match binds whole, non-prefix
+divergence still bails. No server/engine change. **Dogfood outcome (real Chrome, klarum pimas-port):** every
+load-strategy island now ADOPTS in place instead of discarding+rebuilding — `/showcase/` (the 55.8 KB flagship),
+`/` (herocover, exercising the 3a ref), `/pricing/` — and stays interactive after adoption (tab-switch verified,
+no JS errors). The boot swap is committed on klarum's `pimas-port` branch (d7b7c73, unpushed — a deploy call for
+the owner); claim's whole-tree fallback keeps it safe on any not-yet-adoptable island. Remaining: subtree-
+granular fallback, and D4 (consume the resume capture-table so claim works from serialized captures, not just
+live closures). Size: hydrate 2340→2425. +3 vitest, +2 real-browser (182 vitest + 26 browser). Commits f2170ee, f4f32c4.
