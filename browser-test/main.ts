@@ -11,5 +11,6 @@ import "./tests/events.test";
 import "./tests/inputs.test";
 import "./tests/on-mount.test";
 import "./tests/error-boundary.test";
+import "./tests/resume.test";
 
 run();

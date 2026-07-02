@@ -7,13 +7,34 @@
  * evaluated a single time and the value is baked into the string.
  */
 import { untrack } from "../reactive/index.js";
-import type { RenderBackend } from "../dom/engine.js";
+import type { RenderBackend, CaptureEntry } from "../dom/engine.js";
 
 interface SEl {
   kind: 1;
   tag: string;
   attrs: Map<string, string>;
   children: SNode[];
+}
+
+// `CaptureEntry` is the shared wire contract (see dom/engine.ts). An element's
+// `on:<type>` attribute holds this entry's INDEX into the per-render table
+// (index, not ref, so a ref containing `#`/spaces is never parsed out of HTML).
+
+// Per-render capture table. `renderToString` brackets a render with
+// beginCapture()/collectCapture(); `listen` pushes into it. Module-level is safe
+// because a server render is synchronous and non-reentrant (D#31 create-order).
+let captureTable: CaptureEntry[] | null = null;
+
+/** Start collecting serialized handler descriptors for one render pass. */
+export function beginCapture(): void {
+  captureTable = [];
+}
+
+/** End the pass; return the collected table (empty if nothing was serialized). */
+export function collectCapture(): CaptureEntry[] {
+  const t = captureTable ?? [];
+  captureTable = null;
+  return t;
 }
 interface SText {
   kind: 2;
@@ -71,12 +92,29 @@ export const stringBackend: RenderBackend = {
     const attrs = (el as SEl).attrs;
     attrs.set("style", (attrs.get("style") ?? "") + `${name}:${value};`);
   },
-  listen() {
-    // No-op: a server render can't bind events. RESERVED (#30): for a handler
-    // *descriptor* this is where we'll later emit `on:<type>="<ref>#…"` + a
-    // per-root capture table so a qwikloader-style dispatcher can resume without
-    // re-running components. Left inert now — islands (#29) client-render, so the
-    // browser rebinds via the DOM backend; nothing to serialize yet.
+  listen(el, type, handler) {
+    // A server render can't bind a live function. For resumability (#30) a
+    // handler *descriptor* ({ref, load, capture}) IS serializable: emit an
+    // `on:<type>` attribute carrying this handler's index into the per-render
+    // capture table, and record {ref, capture}. A qwikloader-style dispatcher
+    // (pimas/dom `resume`) later resolves ref → handler and invokes it with the
+    // captured state — no component re-execution.
+    if (typeof handler === "function") {
+      // A bare closure can't cross the wire; under SSR it silently drops
+      // interactivity. Warn (build-time diagnostic) — pass a HandlerDescriptor
+      // to serialize it, or bind it client-side via islands (#29).
+      console.warn(`pimas/server: on${type} closure can't serialize — use a HandlerDescriptor.`);
+      return;
+    }
+    if (captureTable === null) {
+      // A descriptor outside a renderToString pass has nowhere to record its
+      // capture; ignore rather than emit a dangling attribute.
+      console.warn(`pimas/server: on${type} descriptor ignored outside renderToString().`);
+      return;
+    }
+    const index = captureTable.length;
+    captureTable.push({ ref: handler.ref, capture: handler.capture ?? [] });
+    (el as SEl).attrs.set(`on:${type}`, String(index));
   },
   nextSibling() {
     return null; // SSR runs once; reconcile never takes the move path

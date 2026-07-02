@@ -37,6 +37,12 @@ export interface HandlerDescriptor<E = any> {
 
 export type Handler<E = any> = EventHandler<E> | HandlerDescriptor<E>;
 
+// The resumability wire contract lives in a zero-dependency module (so the
+// client `resume()` dispatcher can import it without dragging the renderer);
+// re-exported here since this is the conceptual home next to HandlerDescriptor.
+export { STATE_SCRIPT_TYPE } from "./wire.js";
+export type { CaptureEntry } from "./wire.js";
+
 export interface RenderBackend {
   element(tag: string): BNode;
   text(value: string): BNode;

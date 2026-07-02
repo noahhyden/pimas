@@ -22,6 +22,7 @@ const alias = {
   pimas: src("reactive/index.ts"),
   "pimas/dom": src("dom/index.ts"),
   "pimas/server": src("server/index.ts"),
+  "pimas/resume": src("dom/resume.ts"),
   "pimas/flow": src("flow/index.ts"),
   "pimas/store": src("store/index.ts"),
 };
@@ -55,11 +56,21 @@ const alias = {
 // speculation (predict an EDIT without committing) + `onStoreWrite` provenance.
 // store 1575→1625. Both are the L3/L2 store features; still opt-in — a store
 // consumer that never speculates or subscribes to writes pays only the branches.
+// Re-baselined for RESUMABILITY (#6/#30): the string backend's `listen` now
+// serializes handler DESCRIPTORS (emits `on:<type>` + a per-render capture table),
+// and `renderToString` flushes that table as an `application/pimas-state` script.
+// This is the foundational resume path (compiler-free proof of the reserved seam):
+// server 1350→1550. The client dispatcher ships as a SEPARATE entry, `pimas/resume`
+// (~640 gz), that pulls the zero-dep wire contract but NOT the renderer — a
+// resumable page ships the dispatcher, never the component code. Deliberate, not
+// bloat: a page with no serializable handlers emits zero extra bytes (0-KB-static
+// guarantee preserved).
 const fixtures = {
   "core: signal only": [`import { createSignal } from "pimas"; createSignal(0);`, 725],
   "core: full surface": [`import * as R from "pimas"; globalThis.x = R;`, 1325],
   "dom: render + h": [`import { render, h } from "pimas/dom"; globalThis.x = [render, h];`, 1950],
-  "server: renderToString": [`import { renderToString } from "pimas/server"; globalThis.x = renderToString;`, 1350],
+  "server: renderToString": [`import { renderToString } from "pimas/server"; globalThis.x = renderToString;`, 1550],
+  "resume: dispatcher": [`import { resume, registerHandler } from "pimas/resume"; globalThis.x = [resume, registerHandler];`, 700],
   "flow: Show + Switch": [`import { Show, Switch, Match } from "pimas/flow"; globalThis.x = [Show, Switch, Match];`, 900],
   "flow: For (keyed)": [`import { For } from "pimas/flow"; globalThis.x = For;`, 1375],
   "flow: ErrorBoundary": [`import { ErrorBoundary } from "pimas/flow"; globalThis.x = ErrorBoundary;`, 1000],

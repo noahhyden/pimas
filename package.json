@@ -19,6 +19,10 @@
       "types": "./dist/server/index.d.ts",
       "import": "./dist/server/index.js"
     },
+    "./resume": {
+      "types": "./dist/dom/resume.d.ts",
+      "import": "./dist/dom/resume.js"
+    },
     "./flow": {
       "types": "./dist/flow/index.d.ts",
       "import": "./dist/flow/index.js"
