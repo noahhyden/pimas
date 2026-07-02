@@ -13,6 +13,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createSignal } from "pimas";
 import { For, Show } from "pimas/flow";
+import { render } from "pimas/dom";
 import { renderToString } from "pimas/server";
 import { claim } from "pimas/hydrate";
 
@@ -293,6 +294,38 @@ describe("claim — control flow (slice 2)", () => {
     expect(refs.b instanceof HTMLElement).toBe(true);
   });
 
+  it("adopts an existing <svg> subtree and keeps its namespace", () => {
+    const App = () => (
+      <svg viewBox="0 0 10 10">
+        <circle cx="5" cy="5" r="4" />
+      </svg>
+    );
+    const container = serverInto(() => <App />);
+    const svg = container.querySelector("svg")!;
+    const circle = container.querySelector("circle")!;
+
+    claim(() => <App />, container);
+    expect(container.querySelector("svg")).toBe(svg); // adopted, not rebuilt
+    expect(svg.namespaceURI).toBe("http://www.w3.org/2000/svg");
+    expect(circle.namespaceURI).toBe("http://www.w3.org/2000/svg");
+  });
+
+  it("materializes a NEW svg row post-adoption in the SVG namespace", () => {
+    const [dots, setDots] = createSignal<Array<{ cx: number }>>([{ cx: 1 }]);
+    const App = () => (
+      <svg>
+        <For each={dots}>{(d: { cx: number }) => <circle cx={() => String(d.cx)} r="1" />}</For>
+      </svg>
+    );
+    const container = serverInto(() => <App />);
+    claim(() => <App />, container);
+
+    setDots([{ cx: 1 }, { cx: 2 }]); // new <circle> created via materialize()
+    const circles = container.querySelectorAll("circle");
+    expect(circles.length).toBe(2);
+    expect(circles[1]!.namespaceURI).toBe("http://www.w3.org/2000/svg"); // not HTMLUnknownElement
+  });
+
   it("toggles a <Show> branch after claim", () => {
     const [open, setOpen] = createSignal(true);
     const App = () => (
@@ -310,5 +343,59 @@ describe("claim — control flow (slice 2)", () => {
     expect(container.querySelector("p.body")).toBeTruthy(); // re-materialized
 
     dispose();
+  });
+});
+
+describe("env seam — mixed backends coexist (D#49)", () => {
+  // A claimed island (claim backend) and a normally-rendered island (DOM backend)
+  // on one page must NOT cross backends: each computation recomputes under the
+  // backend it was created with. If the env seam regressed to a single global
+  // backend, one island's <For> update would build through the other's backend —
+  // e.g. the claimed island would stringify DOM-built rows into escaped text.
+  it("a rendered <For> and a claimed <For> each reconcile under their own backend", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const [rendered, setRendered] = createSignal(["a", "b"]);
+      const rContainer = document.createElement("div");
+      document.body.appendChild(rContainer);
+      render(
+        () => (
+          <ul>
+            <For each={rendered}>{(x: string) => <li>{() => "R:" + x}</li>}</For>
+          </ul>
+        ),
+        rContainer,
+      );
+
+      const [claimed, setClaimed] = createSignal(["x", "y"]);
+      const App = () => (
+        <ul>
+          <For each={claimed}>{(x: string) => <li>{() => "C:" + x}</li>}</For>
+        </ul>
+      );
+      const html = renderToString(() => <App />);
+      const cContainer = document.createElement("div");
+      cContainer.innerHTML = html;
+      document.body.appendChild(cContainer);
+      claim(() => <App />, cContainer);
+
+      // Update BOTH — interleaved. Each appends a new row that must materialize
+      // through its own backend.
+      setRendered(["a", "b", "c"]);
+      setClaimed(["x", "y", "z"]);
+
+      expect([...rContainer.querySelectorAll("li")].map((l) => l.textContent)).toEqual([
+        "R:a",
+        "R:b",
+        "R:c",
+      ]);
+      expect([...cContainer.querySelectorAll("li")].map((l) => l.textContent)).toEqual([
+        "C:x",
+        "C:y",
+        "C:z", // if backends crossed, this row would be escaped/absent
+      ]);
+    } finally {
+      warn.mockRestore();
+    }
   });
 });
