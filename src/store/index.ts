@@ -15,13 +15,18 @@
  * which mutates the raw object and pings only the signals for the fields that
  * actually changed — inside a `batch`, so dependent effects flush once.
  *
- * Deferred to v2 (not needed yet): `produce` (mutable draft) and `reconcile`
- * (diff external data in, preserving identity). See DECISIONS.
+ * v2 `reconcile` (#5): diff external data into the store preserving object
+ * identity (matched by key) so a server-refreshed keyed list reuses row proxies
+ * and keeps keyed `<For>` stable — see `reconcile` below. `produce` (mutable
+ * draft) is still deferred (sugar only). See DECISIONS.
  */
 import { createSignal, batch, getListener, speculationScratch } from "../reactive/index.js";
 
 const $RAW = Symbol("pimas.store.raw");
 const $NODES = Symbol("pimas.store.nodes");
+// Tags a `reconcile(next)` updater so the setter diffs-in-place instead of
+// replacing the reference (which would re-mint every proxy and rebuild <For>).
+const $RECONCILE = Symbol("pimas.store.reconcile");
 // One extra tracking signal per object, pinged when its key set / array length
 // changes — so `Object.keys`, `in`, iteration, and `.length` are reactive.
 const $KEYS = Symbol("pimas.store.keys");
@@ -177,11 +182,114 @@ function setProperty(state: Record<PropertyKey, unknown>, key: PropertyKey, valu
   }
 }
 
+// ── reconcile (#5): diff external data in, preserving row identity ────────────
+
+interface ReconcileConfig {
+  /** Unwrapped replacement value (used for the shape check + plain-replace fallback). */
+  next: unknown;
+  /** Diff `next` into `prev` in place. A CLOSURE so the walkers below are pulled
+   *  into the bundle only when `reconcile` is actually imported — a createStore
+   *  consumer that never reconciles pays nothing (tree-shaken, like speculate). */
+  run: (prev: Record<PropertyKey, unknown>) => void;
+}
+
+/** The reconcile tag on a value, if any. */
+function reconcileTag(v: unknown): ReconcileConfig | undefined {
+  return v && typeof v === "object" ? (v as { [$RECONCILE]?: ReconcileConfig })[$RECONCILE] : undefined;
+}
+
+/**
+ * Read a raw field, honoring the speculation scratch (mirrors the get trap) so
+ * a reconcile that runs during `speculate` diffs against the what-if, not the
+ * committed raw. Returns RAW values (scratch stores unwrapped), so the walkers
+ * can recurse into raw children and reuse their cached proxies.
+ */
+function readField(target: Record<PropertyKey, unknown>, key: PropertyKey): unknown {
+  const scratch = speculationScratch();
+  if (scratch) {
+    const shadow = scratch.get(target) as Map<PropertyKey, unknown> | undefined;
+    if (shadow && shadow.has(key)) return shadow.get(key);
+  }
+  return target[key];
+}
+
+/** Both wrappable and the same shape (both arrays, or both plain objects). */
+function sameShape(a: unknown, b: unknown): boolean {
+  return isWrappable(a) && isWrappable(b) && Array.isArray(a) === Array.isArray(b);
+}
+
+/** Diff `next` into the raw object `prev`, mutating in place through setProperty. */
+function applyReconcile(prev: Record<PropertyKey, unknown>, next: unknown, keyName: string | null): void {
+  const n = unwrap(next);
+  if (Array.isArray(prev) && Array.isArray(n)) reconcileArray(prev as unknown[], n, keyName);
+  else reconcileObject(prev, n as Record<PropertyKey, unknown>, keyName);
+}
+
+function reconcileObject(prev: Record<PropertyKey, unknown>, next: Record<PropertyKey, unknown>, keyName: string | null): void {
+  for (const k of Object.keys(next)) {
+    const nv = unwrap(next[k]);
+    const pv = readField(prev, k);
+    // Recurse into a same-shaped child to preserve its proxy identity; otherwise
+    // a plain field write (which self-dedups + fine-grained-notifies).
+    if (sameShape(pv, nv)) applyReconcile(pv as Record<PropertyKey, unknown>, nv, keyName);
+    else setProperty(prev, k, nv);
+  }
+  // Delete keys absent from `next` (routes through setProperty → pings $KEYS).
+  for (const k of Object.keys(prev)) {
+    if (!(k in next)) setProperty(prev, k, undefined);
+  }
+}
+
+function reconcileArray(prevArr: unknown[], next: unknown[], keyName: string | null): void {
+  const prev = prevArr as unknown as Record<PropertyKey, unknown>; // setProperty/readField view
+  // Snapshot key → existing RAW row BEFORE mutating, so matched rows keep their
+  // reference (hence their cached proxy, hence their <For> DOM row).
+  const byKey = new Map<unknown, Record<PropertyKey, unknown>>();
+  if (keyName !== null) {
+    for (let i = 0; i < prevArr.length; i++) {
+      const row = readField(prev, i);
+      if (isWrappable(row)) byKey.set(row[keyName], row);
+    }
+  }
+
+  let structural = prevArr.length !== next.length;
+
+  for (let j = 0; j < next.length; j++) {
+    const nItem = unwrap(next[j]);
+    const match = keyName !== null && isWrappable(nItem) ? byKey.get(nItem[keyName]) : undefined;
+    if (match !== undefined) {
+      byKey.delete((nItem as Record<PropertyKey, unknown>)[keyName!]); // consume — a duplicate key falls through to a fresh row
+      applyReconcile(match, nItem, keyName); // update the SAME row's fields in place
+      if (readField(prev, j) !== match) {
+        setProperty(prev, j, match); // move to slot j (same ref → proxy kept)
+        structural = true;
+      }
+    } else {
+      // Genuinely new row: a fresh raw object → new proxy → <For> builds a new DOM row.
+      setProperty(prev, j, nItem);
+      structural = true;
+    }
+  }
+
+  // Truncate a shrunk tail (removed rows' <For> scopes dispose via onCleanup).
+  if (prevArr.length !== next.length) setProperty(prev, "length", next.length);
+
+  // A same-length reorder/swap bumps only per-index nodes (which <For> doesn't
+  // track); ping $KEYS so <For> re-diffs and MOVES surviving rows (not rebuild).
+  if (structural && prevArr.length === next.length) bump(prevArr, $KEYS);
+}
+
 /** Walk `[...keys, value]`: navigate by the keys, apply `value` at the leaf. */
 function updatePath(current: Record<PropertyKey, unknown>, path: unknown[]): void {
   if (path.length === 1) {
-    // Merge a partial object (or updater→partial) into `current`.
     let value = path[0];
+    // A root reconcile: diff `next` into the root object in place.
+    const rc = reconcileTag(value);
+    if (rc) {
+      if (sameShape(current, rc.next)) rc.run(current);
+      return;
+    }
+    // Merge a partial object (or updater→partial) into `current`.
     if (typeof value === "function") value = (value as (c: unknown) => unknown)(current);
     if (value && typeof value === "object") {
       for (const k of Object.keys(value as object)) {
@@ -193,11 +301,40 @@ function updatePath(current: Record<PropertyKey, unknown>, path: unknown[]): voi
   const key = path[0] as PropertyKey;
   if (path.length === 2) {
     let value = path[1];
+    // A keyed reconcile: diff `next` into current[key] in place (else replace).
+    const rc = reconcileTag(value);
+    if (rc) {
+      const prev = current[key];
+      if (sameShape(prev, rc.next)) rc.run(prev as Record<PropertyKey, unknown>);
+      else setProperty(current, key, rc.next);
+      return;
+    }
     if (typeof value === "function") value = (value as (p: unknown) => unknown)(current[key]);
     setProperty(current, key, value);
     return;
   }
   updatePath(current[key] as Record<PropertyKey, unknown>, path.slice(1));
+}
+
+/**
+ * Diff `next` into a store in place, preserving object identity so keyed `<For>`
+ * rows are reused, not rebuilt. Pass the result to the setter where a value goes:
+ *
+ *   setStore("rows", reconcile(freshRows));       // rows matched by `id` (default)
+ *   setStore("rows", reconcile(freshRows, { key: "sku" }));
+ *   setStore(reconcile(freshWholeState));         // reconcile the root object
+ *
+ * Array rows with the same key are mutated field-by-field through the fine-grained
+ * setter (only changed fields notify; unchanged rows stay silent), moved on
+ * reorder, and added/removed on membership change. Nested objects/arrays recurse.
+ * `key: null` opts out of identity matching (positional replace). It is a
+ * COMMIT-time operation — not intended for use inside `speculate`.
+ */
+export function reconcile<T>(next: T, options?: { key?: string | null }): T {
+  const key = options && "key" in options ? (options.key ?? null) : "id";
+  const n = unwrap(next);
+  const cfg: ReconcileConfig = { next: n, run: (prev) => applyReconcile(prev, n, key) };
+  return { [$RECONCILE]: cfg } as unknown as T;
 }
 
 export type Store<T> = T;
