@@ -84,7 +84,9 @@ export interface AgentBridge {
   subscribe(listener: (e: AgentEvent) => void): () => void;
   /** A machine-readable description of exposed state + actions (the wire contract). */
   descriptor(): AgentDescriptor;
-  /** Agent side: invoke a registered action by name. Unknown name throws. */
+  /** Agent side: invoke a registered action by name. Unknown name throws. An
+   *  async action returns a promise that resolves AFTER its awaited writes land
+   *  and L2 provenance is captured; a sync action returns its value directly. */
   call(name: string, ...args: unknown[]): unknown;
   /** L2: the causal record of the most recent action (or null before any call). */
   explain(): CauseRecord | null;
@@ -201,19 +203,41 @@ export function createAgentBridge(setup: (r: AgentRegistrar) => void, opts: Agen
       const writes: string[] = [];
       const stopTap = opts.writeTap?.((label) => writes.push(label));
       const before = new Map(latest); // exposing effects update `latest` during fn()
+      // Record provenance once the action's effects have all landed. For an
+      // ASYNC action this must run AFTER the promise settles — otherwise the
+      // awaited writes (which happen past the first await) are missed (#13).
+      const settle = (): void => {
+        stopTap?.();
+        const changed = [...latest.keys()].filter((k) => !Object.is(before.get(k), latest.get(k)));
+        lastCause = { action: name, args, writes, changed };
+        // Bounded change log (oldest→newest): the recent sequence, not just last.
+        causeLog.push(lastCause);
+        if (causeLog.length > historyLimit) causeLog.shift();
+        emit({ kind: "cause", action: name, args, writes, changed });
+      };
+
       let result: unknown;
       try {
         result = untrack(() => fn(...args));
-      } finally {
-        stopTap?.();
+      } catch (e) {
+        stopTap?.(); // no provenance on a synchronous throw (as before)
+        throw e;
       }
-      const changed = [...latest.keys()].filter((k) => !Object.is(before.get(k), latest.get(k)));
-      lastCause = { action: name, args, writes, changed };
-      // Retain a bounded change log (oldest→newest) so an agent can see the
-      // recent sequence of causes, not just the last one (L2, #13).
-      causeLog.push(lastCause);
-      if (causeLog.length > historyLimit) causeLog.shift();
-      emit({ kind: "cause", action: name, args, writes, changed });
+      // Async action: defer provenance until its awaited writes have committed.
+      // `call` returns a promise resolving to the action's value, post-capture.
+      if (result != null && typeof (result as { then?: unknown }).then === "function") {
+        return (result as Promise<unknown>).then(
+          (v) => {
+            settle();
+            return v;
+          },
+          (e) => {
+            stopTap?.(); // rejected → no provenance, just unsubscribe
+            throw e;
+          },
+        );
+      }
+      settle();
       return result;
     },
     explain: () => lastCause,

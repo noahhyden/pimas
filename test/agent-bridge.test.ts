@@ -133,6 +133,54 @@ describe("agent bridge — L1 subscribe (issue #13)", () => {
     bridge.dispose();
   });
 
+  it("captures L2 provenance for an ASYNC action after its awaited writes land", async () => {
+    const [s, set] = createStore({ rows: [{ id: "a", status: "open" }, { id: "b", status: "open" }] });
+    const openCount = createMemo(() => s.rows.filter((r) => r.status === "open").length);
+    const bridge = createAgentBridge(
+      (r) => {
+        r.expose("openCount", () => openCount());
+        r.action("setStatusAsync", async (i, st) => {
+          await Promise.resolve(); // the write lands PAST the first await
+          set("rows", i as number, "status", st);
+        });
+      },
+      { writeTap: (record) => onStoreWrite((e) => record(e.path.join("."))) },
+    );
+
+    const p = bridge.call("setStatusAsync", 0, "done") as Promise<unknown>;
+    // Provenance must NOT be captured yet — the awaited write hasn't happened.
+    expect(bridge.explain()).toBeNull();
+    expect(openCount()).toBe(2);
+
+    await p;
+
+    // Now the awaited write has committed and provenance reflects it.
+    expect(bridge.explain()).toEqual({
+      action: "setStatusAsync",
+      args: [0, "done"],
+      writes: ["rows.0.status"],
+      changed: ["openCount"],
+    });
+    expect(openCount()).toBe(1);
+
+    bridge.dispose();
+  });
+
+  it("does not record provenance when an async action rejects", async () => {
+    const [s, set] = createStore({ n: 0 });
+    const bridge = createAgentBridge((r) => {
+      r.expose("n", () => s.n);
+      r.action("boom", async () => {
+        await Promise.resolve();
+        set("n", 1);
+        throw new Error("nope");
+      });
+    });
+    await expect(bridge.call("boom") as Promise<unknown>).rejects.toThrow("nope");
+    expect(bridge.explain()).toBeNull(); // rejected → no cause recorded
+    bridge.dispose();
+  });
+
   it("retains a bounded L2 change log (history), oldest→newest", () => {
     const [s, set] = createStore({ rows: [{ id: "a", status: "open" }, { id: "b", status: "open" }] });
     const openCount = createMemo(() => s.rows.filter((r) => r.status === "open").length);
