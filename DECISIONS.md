@@ -779,3 +779,23 @@ bar (a scoping pass found delta-coalescing already covered by the scheduler seam
 merely ergonomic); the larger thesis-advancing step — a 2nd quantitative-model proof (`composite-ind`, whose
 `model_copy(update=…)` sensitivity sweeps map 1:1 onto `speculateSweep`) — is model-repo work that consumes the
 shipped surface. +2 vitest (191 total). Commit c61862e.
+
+### 53. Agent-native — project L3 through WebMCP (`simulate_*`), and first test the CLAIM (#13)
+D#51 deliberately parked WebMCP-L3 ("D#42 parks WebMCP"). That park is now the thing blocking the only
+question that matters: every proof to date validated the *mechanism* (parity, `speculateSweep == N builds`);
+none had put a real agent in the loop, because the agent-facing surface (`toWebMCP`) projected L1 reads +
+mutating actions but NOT the what-if wedge — so an MCP/WebMCP agent literally could not do an L3 what-if.
+Un-parked it: `toWebMCP` now also registers, per mutating action, a read-only `simulate_<name>` tool
+(→ `bridge.speculate`, predicts the exposed after-state against a shadow graph, commits nothing), plus
+`simulate_plan` (→ `speculatePlan`) and `simulate_sweep` (→ `speculateSweep`). All readOnly; `simulateTools:false`
+yields a poke-and-rescrape baseline — that flag IS the A/B switch. Refactored the action schema/argv mapping into
+shared `schemaFor`/`argvFor` helpers. +3 vitest. Commit dcb2672. Then a **claim spike** (sector-engines
+`engines/composite_ind/frontend/eval/spike.mjs`) drove the composite model through the real projected tools,
+same grid-search policy, A vs B: same answers/correctness, but B solved each what-if with ~14× fewer calls and
+**0 wrong live-state commits** vs A's 27–36 (France→#2 solvable: A 55/37/27, B 4/1/0; Germany→#1 impossible:
+A 54/36/36, B 3/0/0). The spike caught two real bugs a live agent hits — `params`-as-objects in the frontend
+agent (`ActionMeta.params` is `string[]`; fixed sector-engines 9c23706) and a void action → `JSON.stringify(undefined)`
+→ non-string `text:undefined` in the pimas envelope (fixed 9af924e, +1 vitest). 194→195 vitest, webmcp is
+tree-shakeable (no budget fixture). The metric-grade LLM benchmark (5 auto-graded tasks, in-node tool loop,
+free Gemini + Haiku cross-check, instrumented counting seam) is designed in the frontend `eval/README.md`;
+NOT built (needs a free AI Studio key + ~2 days) — flagged for the owner.

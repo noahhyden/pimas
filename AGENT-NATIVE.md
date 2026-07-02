@@ -105,7 +105,12 @@ shadow. Design around it; don't pretend it's solved.
   argsList)` runs a sensitivity sweep — both zero core change, on the quantitative-model axis.
 - ✅ **L2** — `pimas/store` `onStoreWrite` + a bridge `CauseRecord` (`explain()` / `cause` event).
 - ✅ **WebMCP** — `pimas/agent/webmcp` `toWebMCP(bridge)` (actions→tools, state→`get_*` tools,
-  `document.modelContext`, AbortSignal teardown, MCP content envelope).
+  `document.modelContext`, AbortSignal teardown, MCP content envelope). **+ L3 now projected**
+  (commit dcb2672): each mutating action → a read-only `simulate_<name>` tool (→ `speculate`,
+  predicts without committing), plus `simulate_plan` (→ `speculatePlan`) and `simulate_sweep`
+  (→ `speculateSweep`). `simulateTools:false` gives a poke-and-rescrape baseline — the A/B switch
+  for the eval below. This closes the gap that made the claim untestable: until now a real MCP/WebMCP
+  agent got L1 reads + mutating actions but NOT the what-if wedge.
 - ✅ **Validated** — 101 vitest green; the klarum showcase model; and end-to-end on a **real HTTP
   stack** (pivi `/api/proposals`): a browser **preview → approve → commit** copilot
   (`Klarum-Software/pivi` worktree `spike/pimas-agent-records`, `agent-native/`) — `speculate`
@@ -129,6 +134,19 @@ shadow. Design around it; don't pretend it's solved.
   what-if (8.3 KB gz). This is the **first consumer of the D#51/#52 plan/sweep/commit surface**, and —
   a cross-sectional normalise→rank pipeline vs. wall-live's time-stepped sim — the **N=2 data point**
   that de-risks a future reusable "model→pimas graph" helper (D#51's stated gate).
+
+- ✅ **The claim itself, first tested (2026-07-03)** — every proof above validated the *mechanism*
+  (parity, `speculateSweep == N builds`); none put a real agent in the loop. `sector-engines`
+  `engines/composite_ind/frontend/eval/spike.mjs` drives the composite-index model through the **real
+  projected WebMCP tools** under two conditions with an identical grid-search policy: **A** (baseline:
+  actions + `get_*` only, `simulateTools:false` — must commit each probe to observe it) vs **B**
+  (adds `simulate_sweep`). Same answers, same correctness, structurally different footprint:
+  France→#2 (solvable) A=55 calls/37 commits/**27 wrong live states**, B=4/1/**0**; Germany→#1
+  (impossible) A=54/36/**36**, B=3/0/**0**. "Impossible" is where simulate wins hardest (baseline
+  must probe the whole space to be sure). The spike also caught + fixed two real bugs a live agent
+  would hit (`params`-as-objects in the frontend; void-action envelope → `text:undefined` in pimas,
+  9af924e). It proves ergonomics + the wedge; the metric-grade LLM benchmark (5 tasks, Gemini/Haiku,
+  instrumented) is designed in `eval/README.md`, not yet built.
 
 **Sharpened framing (2026-07-01).** L3 is at its sharpest not on generic app state but on **pure,
 derived-heavy quantitative models** — finance/economics/engineering pipelines where hypothetical
