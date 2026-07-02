@@ -81,7 +81,7 @@ render(() => <Counter />, document.body); // only the text node updates on click
 | **6 — Agent-native** | expose the reactive graph to an AI agent — subscribe (L1), causal provenance (L2), deterministic what-if `speculate` (L3), WebMCP projection; proven on a real HTTP stack | 🔬 exploration |
 
 Real-browser tests live in `browser-test/` (`npm run test:browser`, drives a real Chrome;
-191 vitest + 26 browser tests green). Architecture rationale for every choice is in
+195 vitest + 26 browser tests green). Architecture rationale for every choice is in
 [`DECISIONS.md`](DECISIONS.md); the phase tracker is [issue #1](../../issues/1).
 
 ### Phase 5
@@ -161,9 +161,11 @@ derivations. A virtual DOM is not. `pimas/agent` turns that into an agent-facing
   then-rollback). The bridge adds the **planning half**: `speculatePlan(steps)` composes a
   multi-factor scenario in one shadow, `speculateSweep(name, argsList)` runs a sensitivity sweep, `commitPlan(steps)` commits an approved scenario as one action —
   the core of a what-if engine for quantitative models. (D#51)
-- **WebMCP.** `pimas/agent/webmcp` `toWebMCP(bridge)` projects actions → tools and state →
-  read-only `get_*` tools onto the browser `document.modelContext` standard; the bridge's live
-  subscribe channel is the push WebMCP structurally lacks — the differentiator.
+- **WebMCP.** `pimas/agent/webmcp` `toWebMCP(bridge)` projects actions → tools, state →
+  read-only `get_*` tools, **and L3 → `simulate_*` tools** (`simulate_<action>` / `simulate_plan` /
+  `simulate_sweep` — predict without committing) onto the browser `document.modelContext` standard.
+  The bridge's live subscribe channel is the push WebMCP structurally lacks; the `simulate_*` tools
+  are the what-if a scrape-and-poke agent cannot do — both are the differentiator.
 
 Proven end-to-end driving a real HTTP stack (pivi's `/api/proposals` contract): a **preview →
 approve → commit** copilot where `speculate` shows the exact resulting totals, *approve* fires a
@@ -175,6 +177,53 @@ after-state, nothing committed) and the core both computes the model *and* rende
 gz; the ported math is pinned to the reference implementation by a cross-language differential test).
 The sharpest fit for L3 is exactly this: **pure, derived-heavy quantitative models**, where "what-if"
 is the whole activity and the memo-purity caveat is free.
+
+#### Why "non-committal" is the whole point
+
+Every existing way an agent touches a UI — WebMCP actions, computer-use, Playwright / accessibility-tree
+scraping — shares one property: **to find out what an action does, the agent has to actually do it, then
+look again.** "What if the weight were 8?" can only be answered by *setting it to 8*. That coupling —
+observation requires mutation — is the tax pimas removes:
+
+1. **Side effects fire for real.** A probe isn't free — setting a value might trigger a network write, an
+   email, a DB row, a cascade. An agent *exploring* options in a normal UI has *taken* every option it
+   considered. `speculate` evaluates the pure derived consequence with **no effect flushed**: the shadow
+   graph recomputes memos, but the side-effecting roots (DOM, network, the real store) never run.
+2. **The live app never enters a wrong state.** The search happens in a shadow, so a human watching the
+   dashboard never sees it thrash, the persisted store never holds garbage between probes, and a crash
+   mid-search can't freeze the app in a wrong state.
+3. **Planning *is* counterfactuals.** To plan multi-step ("if I do A then B, does C become reachable?")
+   you must evaluate branches you will *not* take. If evaluating means committing, you can't compare three
+   options without entering all three and backing out of two — and backing out isn't always possible.
+   `speculate` evaluates every branch against the *same* start state; the agent commits **once**.
+4. **It's exact, not approximate.** Learned agent world-models also simulate-before-acting, but they *guess*
+   and drift. pimas re-runs the app's **own pure memos** against a shadow of the real dependency graph, so
+   the prediction is bit-identical to what committing would have produced. Ground truth, not a forecast.
+
+Only pimas can do this cheaply because the engine keeps **topology (the dependency DAG) separate from
+value**, and memos are pull-based: shadow just the values, reuse the real graph read-only, skip flushing
+effects, roll back by discarding a map. A VDOM has no standing dependency graph to shadow — it would have to
+re-render and diff, with zero guarantee of purity. *Committing is how you normally find out what happens;
+pimas lets the agent find out without it happening — so the UI stops being a surface you poke and becomes a
+model you query.*
+
+#### First measured, not just argued
+
+The claim above is now tested with a real agent in the loop (`sector-engines`
+`engines/composite_ind/frontend/eval/`). The same LLM policy drives a composite-indicator model through the
+projected tools under two conditions — **A** (baseline: mutate + re-read, `simulateTools:false`) vs **B**
+(agent-native: also has `simulate_*`) — on tasks like *"find a single pillar-weight that lifts France into
+the top 2"* and *"…that makes Germany #1"* (impossible). Same answers, same correctness; structurally
+different footprint:
+
+| Task | A — baseline | B — agent-native |
+| --- | --- | --- |
+| France → top-2 (solvable) | 9 tool calls, 8 commits, **1 wrong live state** | 4 calls, 1 commit, **0** |
+| Germany → #1 (impossible) | 10 calls, 9 commits, **4 wrong live states** | 3 calls, 0 commits, **0** |
+
+"Impossible" is where non-committal wins hardest: the baseline must probe the whole space — and pass through
+every wrong live state — to be *sure*; B sweeps it in the shadow and never touches the real model. A
+metric-grade Gemini-driven benchmark (5 auto-graded tasks × reps) rides the same harness (`eval/README.md`).
 
 Exploration, not a committed pivot — the core (Phases 1–5) is unchanged and the whole agent layer is
 opt-in (tree-shaken when unused; the hot-path floor moved only 679→698 gz).
