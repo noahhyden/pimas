@@ -80,7 +80,7 @@ render(() => <Counter />, document.body); // only the text node updates on click
 | **6 — Agent-native** | expose the reactive graph to an AI agent — subscribe (L1), causal provenance (L2), deterministic what-if `speculate` (L3), WebMCP projection; proven on a real HTTP stack | 🔬 exploration |
 
 Real-browser tests live in `browser-test/` (`npm run test:browser`, drives a real Chrome;
-163 vitest + 18 browser tests green). Architecture rationale for every choice is in
+168 vitest + 18 browser tests green). Architecture rationale for every choice is in
 [`DECISIONS.md`](DECISIONS.md); the phase tracker is [issue #1](../../issues/1).
 
 ### Phase 5
@@ -116,9 +116,14 @@ Real-browser tests live in `browser-test/` (`npm run test:browser`, drives a rea
   size budget). The wedge toward automatic resumability (Phase D, staged D1→D4). (D#45)
 - **Agent-surface hardening** — bridge listener isolation, an L2 change-log (`history()`), and correct
   L2 provenance for async actions. (D#46)
-- **Still deferred** (tracked in issues): a microtask scheduler (#3), compiler Phase B (templates) /
-  Phase D (D2+ lazy handler chunks, live-state resume) and the claim/hydrate backend (#6/#12) — the
-  last are bundler/site-repo-coupled or trigger-gated on a dogfood target.
+- **Scheduler seam (#3)** — `setScheduler((flush) => queueMicrotask(flush))` makes flush *timing* pluggable:
+  a synchronous write-burst coalesces into one deferred repaint (effects still run in FIFO order). The default
+  is a direct synchronous flush — timing is byte-for-byte unchanged, so `renderToString` and post-write DOM
+  reads stay correct; deferral is strictly opt-in. `flushSync()` forces a drain when a deferred scheduler is
+  installed. (D#47)
+- **Still deferred** (tracked in issues): compiler Phase B (templates) / Phase D (D2+ lazy handler chunks,
+  live-state resume) and the claim/hydrate backend (#6/#12) — bundler/site-repo-coupled or trigger-gated on a
+  dogfood target.
 
 ### Agent-native (exploration — issue [#13](../../issues/13), rationale in [`AGENT-NATIVE.md`](AGENT-NATIVE.md))
 

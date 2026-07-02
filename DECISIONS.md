@@ -650,3 +650,22 @@ provenance:** `call()` captured `writes`/`changed` synchronously in a `finally`,
 awaited writes (past the first await) were missed → empty CauseRecord; now, when the action returns a
 thenable, provenance is deferred until it settles (`call` returns a promise resolving post-capture; sync
 actions byte-for-byte unchanged; a rejection records nothing). Commits 3a0b004, c01cac5, d8428ca.
+
+### 47. Scheduler seam — pluggable flush timing (#3)
+`writeNode`/`batch` route the implicit flush through a `requestFlush` indirection instead of calling
+`flushEffects()` directly. **Default is a no-op wrapper:** with no scheduler installed, `requestFlush` calls
+`flushEffects()` synchronously — timing byte-for-byte unchanged, so post-write DOM reads and synchronous
+`renderToString` stay correct (the seam had to default sync; async-by-default would break every
+read-after-write assertion and SSR — the research pass confirmed the breakage surface). `setScheduler(fn)`
+installs a custom scheduler (e.g. `(f)=>queueMicrotask(f)`) that **coalesces a synchronous write-burst into
+one deferred flush** via a `scheduled` latch; effects still drain in FIFO enqueue order (the existing
+`effectQueue`), and a write *inside* a running effect is serialized by the pre-existing `flushing` guard, not
+the latch (latch cleared before the drain). `flushSync()` is the escape hatch — force a synchronous drain
+while a deferred scheduler is active (SSR/tests) — and clears the latch so a scheduler that *dropped* its
+callback can't wedge future flushes. `setScheduler` returns the previous scheduler for nest/restore. Chose
+`scheduler: fn|null` (not a default identity arrow) so the common path stays a direct call and the seam costs
+the floor only a branch. Size re-baseline (documented in `size.mjs`): kernel indirection → signal 725→740,
+For 1375→1400, store 1675→1700; full surface 1325→1410 (the two exports, tree-shaken when unused). Dogfood:
+klarum-landing (19 routes) + noahhyden.com (5 routes) both rebuild clean against it — default-sync is
+transparent to existing consumers; activating the microtask scheduler on klarum's per-tick store-write demos
+(e.g. `analytics.tsx`) is the next step. 5 new tests. Commit 8a5b73c.
