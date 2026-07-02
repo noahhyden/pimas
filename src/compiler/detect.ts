@@ -20,6 +20,7 @@
  * leave alone: an expression that is already a function, or a bare literal.
  */
 import ts from "typescript";
+import { isIntrinsicTag, isEventAttrName, isRefAttrName, isFunctionExpr } from "./jsx.js";
 
 /** A [start, end) character range of an expression to wrap. */
 export interface WrapRange {
@@ -27,15 +28,9 @@ export interface WrapRange {
   end: number;
 }
 
-/** Intrinsic (lowercase-leading identifier) tag — mirrors `createWith`. A
- *  member tag (`Foo.Bar`) or capitalized name is a component: excluded. */
-function isIntrinsicTag(tag: ts.JsxTagNameExpression): boolean {
-  return ts.isIdentifier(tag) && /^[a-z]/.test(tag.text);
-}
-
 /** Already a function (idempotent: never double-wrap) or a bare literal. */
 function isProvablySafe(e: ts.Expression): boolean {
-  if (ts.isArrowFunction(e) || ts.isFunctionExpression(e)) return true;
+  if (isFunctionExpr(e)) return true;
   return (
     ts.isStringLiteral(e) ||
     ts.isNumericLiteral(e) ||
@@ -47,12 +42,10 @@ function isProvablySafe(e: ts.Expression): boolean {
   );
 }
 
-/** The runtime's own attribute classification (engine.ts setProp): `ref` and
- *  `on*` are NOT reactive bindings. Matched byte-for-byte, quirks included. */
+/** A reactive attribute binding: not `ref`, not an event (`on*`) — those the
+ *  runtime routes to ref-assign / listen, not to a reactive effect. */
 function isReactiveAttrName(name: string): boolean {
-  if (name === "ref") return false;
-  if (name.length > 2 && name[0] === "o" && name[1] === "n") return false;
-  return true;
+  return !isRefAttrName(name) && !isEventAttrName(name);
 }
 
 /** Collect the expression ranges to wrap, in source order. */
