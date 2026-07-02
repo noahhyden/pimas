@@ -9,6 +9,9 @@
  *      action wrote + which exposed values changed); read it via explain().
  *   L3 simulate  — speculate(name, ...) predicts the exposed state AFTER an
  *      action, computed against a shadow of the graph, WITHOUT committing.
+ *      speculatePlan(steps) composes several writes in one shadow (a multi-factor
+ *      scenario); speculateSweep(name, argsList) runs an independent what-if per
+ *      arg-set (a sensitivity sweep) — the planning half of L3.
  *
  * Headless (no DOM). Fine-grained: exposing `() => s.rows[3].status` subscribes
  * to exactly that store field. Field-level provenance (L2 `writes`) needs a
@@ -95,6 +98,13 @@ export interface AgentBridge {
   history(limit?: number): CauseRecord[];
   /** L3: predict the exposed state after `actionName(...args)` WITHOUT committing. */
   speculate(actionName: string, ...args: unknown[]): Record<string, unknown>;
+  /** L3 multi-factor scenario: predict the exposed state after applying ALL `steps`
+   *  in order against ONE shadow graph. Not reducible to separate `speculate` calls
+   *  — those each reset the shadow, this composes the writes. Nothing commits. */
+  speculatePlan(steps: Array<[string, ...unknown[]]>): Record<string, unknown>;
+  /** L3 sensitivity sweep: run one INDEPENDENT speculation of `actionName` per
+   *  arg-set, returning the predicted exposed state at each point. Nothing commits. */
+  speculateSweep(actionName: string, argsList: unknown[][]): Record<string, unknown>[];
   /** Tear down every exposed subscription (disposes the root owner). */
   dispose(): void;
 }
@@ -165,6 +175,14 @@ export function createAgentBridge(setup: (r: AgentRegistrar) => void, opts: Agen
     const fn = actions.get(name);
     if (!fn) throw new Error(`agent bridge: no action "${name}"`);
     return fn;
+  };
+
+  /** Read every exposed value once — the L3 "predicted after-state" projection.
+   *  Called inside a `speculate` read phase, so these reads hit the shadow graph. */
+  const readAllExposed = (): Record<string, unknown> => {
+    const out: Record<string, unknown> = {};
+    for (const [name, read] of reads) out[name] = read();
+    return out;
   };
 
   return {
@@ -246,14 +264,21 @@ export function createAgentBridge(setup: (r: AgentRegistrar) => void, opts: Agen
       const fn = requireAction(actionName);
       // Apply the action + read every exposed value against a SHADOW of the graph
       // (L3). Nothing commits: the real store/signals are untouched on return.
-      return coreSpeculate(
-        () => void fn(...args),
-        () => {
-          const out: Record<string, unknown> = {};
-          for (const [name, read] of reads) out[name] = read();
-          return out;
-        },
-      );
+      return coreSpeculate(() => void fn(...args), readAllExposed);
+    },
+    speculatePlan(steps) {
+      // One shadow graph, all steps applied in order — the writes COMPOSE (a
+      // multi-factor scenario). Same-field writes are last-write-wins, mirroring
+      // reality. Nothing commits.
+      return coreSpeculate(() => {
+        for (const [name, ...args] of steps) requireAction(name)(...args);
+      }, readAllExposed);
+    },
+    speculateSweep(actionName, argsList) {
+      // One INDEPENDENT top-level speculation per arg-set — a sensitivity sweep.
+      // Each is a fresh shadow (so it never nests), and none commits.
+      const fn = requireAction(actionName);
+      return argsList.map((args) => coreSpeculate(() => void fn(...args), readAllExposed));
     },
     dispose,
   };

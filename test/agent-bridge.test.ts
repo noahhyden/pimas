@@ -133,6 +133,77 @@ describe("agent bridge — L1 subscribe (issue #13)", () => {
     bridge.dispose();
   });
 
+  it("speculatePlan composes multiple writes in one shadow (multi-factor scenario, L3)", () => {
+    const [s, set] = createStore({ rows: [{ id: "a", n: 1 }, { id: "b", n: 2 }] });
+    const total = createMemo(() => s.rows.reduce((x, r) => x + r.n, 0));
+    const bridge = createAgentBridge((r) => {
+      r.expose("total", () => total());
+      r.action("setN", (i, v) => set("rows", i as number, "n", v));
+    });
+
+    // Both writes apply against ONE shadow → combined after-state.
+    const predicted = bridge.speculatePlan([
+      ["setN", 0, 10],
+      ["setN", 1, 20],
+    ]);
+    expect(predicted).toEqual({ total: 30 }); // 10 + 20, jointly
+
+    expect(total()).toBe(3); // nothing committed
+    bridge.dispose();
+  });
+
+  it("speculatePlan is NOT reducible to separate speculate calls (each resets the shadow)", () => {
+    const [s, set] = createStore({ rows: [{ id: "a", n: 1 }, { id: "b", n: 2 }] });
+    const total = createMemo(() => s.rows.reduce((x, r) => x + r.n, 0));
+    const bridge = createAgentBridge((r) => {
+      r.expose("total", () => total());
+      r.action("setN", (i, v) => set("rows", i as number, "n", v));
+    });
+
+    // Separate speculations each see only their own change against the real base.
+    expect(bridge.speculate("setN", 0, 10)).toEqual({ total: 12 }); // 10 + 2
+    expect(bridge.speculate("setN", 1, 20)).toEqual({ total: 21 }); // 1 + 20
+    // The plan composes them — a result neither single call can produce.
+    expect(bridge.speculatePlan([["setN", 0, 10], ["setN", 1, 20]])).toEqual({ total: 30 });
+
+    expect(total()).toBe(3);
+    bridge.dispose();
+  });
+
+  it("speculateSweep predicts state at each point of a sensitivity sweep (L3)", () => {
+    const [power, setPower] = createSignal(250);
+    const output = createMemo(() => power() * 4); // some derived model
+    const bridge = createAgentBridge((r) => {
+      r.expose("output", () => output());
+      r.action("setPower", (v) => setPower(v as number));
+    });
+
+    const sweep = bridge.speculateSweep("setPower", [[250], [500], [1000]]);
+    expect(sweep).toEqual([{ output: 1000 }, { output: 2000 }, { output: 4000 }]);
+
+    expect(power()).toBe(250); // real signal untouched
+    bridge.dispose();
+  });
+
+  it("plan/sweep are pure what-ifs — they record NO L2 causal history", () => {
+    const [s, set] = createStore({ rows: [{ id: "a", n: 1 }] });
+    const total = createMemo(() => s.rows.reduce((x, r) => x + r.n, 0));
+    const bridge = createAgentBridge(
+      (r) => {
+        r.expose("total", () => total());
+        r.action("setN", (i, v) => set("rows", i as number, "n", v));
+      },
+      { writeTap: (record) => onStoreWrite((e) => record(e.path.join("."))) },
+    );
+
+    bridge.speculatePlan([["setN", 0, 9]]);
+    bridge.speculateSweep("setN", [[0, 5], [0, 7]]);
+    expect(bridge.explain()).toBeNull(); // no action committed → no provenance
+    expect(bridge.history()).toEqual([]);
+
+    bridge.dispose();
+  });
+
   it("captures L2 provenance for an ASYNC action after its awaited writes land", async () => {
     const [s, set] = createStore({ rows: [{ id: "a", status: "open" }, { id: "b", status: "open" }] });
     const openCount = createMemo(() => s.rows.filter((r) => r.status === "open").length);
