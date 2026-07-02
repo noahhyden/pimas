@@ -23,6 +23,10 @@
       "types": "./dist/dom/resume.d.ts",
       "import": "./dist/dom/resume.js"
     },
+    "./compiler": {
+      "types": "./dist/compiler/index.d.ts",
+      "import": "./dist/compiler/index.js"
+    },
     "./flow": {
       "types": "./dist/flow/index.d.ts",
       "import": "./dist/flow/index.js"
@@ -59,6 +63,14 @@
     "test:browser": "vite"
   },
   "keywords": ["reactive", "signals", "ui", "framework", "fine-grained"],
+  "peerDependencies": {
+    "typescript": ">=5"
+  },
+  "peerDependenciesMeta": {
+    "typescript": {
+      "optional": true
+    }
+  },
   "devDependencies": {
     "esbuild": "^0.24.2",
     "happy-dom": "^16.5.3",
