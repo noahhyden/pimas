@@ -593,3 +593,60 @@ a purpose-built **reactive what-if + provenance engine**, dogfooded on real mode
 is the delivery vehicle. WebMCP/adoption/standards are explicitly out of scope for this direction.
 Generalizes to the econ-model repos (road-econ, fiscal-incidence) whose hand-rolled `model_copy(update=…)`
 sweeps are a weaker reimplementation of `speculate`.
+
+### 43. createStore v2 — `reconcile` + `produce` as tree-shakeable tagged updaters (#5)
+`reconcile(next, {key="id"})` diffs external data into the store **in place**: keyed array rows are matched
+and mutated field-by-field through the existing fine-grained `setProperty` (only changed fields notify;
+unchanged rows stay silent), keeping the **same raw object → same cached proxy → same keyed `<For>` DOM
+row**; add/remove/reorder handled, nested objects/arrays recurse, a same-length reorder bumps `$KEYS` so
+`<For>` re-diffs. `produce(fn)` is Immer-style mutable-draft sugar — a writable draft proxy routes every
+set/delete through `setProperty` (mutate-in-place, notify-as-you-go), inheriting dedup/`$KEYS`/`__proto__`
+-guard/speculation-scratch for free. Both ship as **one `$UPDATER` tag carrying an `apply` closure**, so the
+setter's always-shipped cost is a single tag lookup and each feature's heavy logic tree-shakes for non-users
+(store 1625→1675 gz; per-feature opt-in ~+300 / ~+190). `produce` returns a tagged `(prev)=>T` function so
+its draft type infers from the setter slot; reorders must use `reconcile` (a same-length `splice` bumps
+per-index nodes, not `$KEYS`). Commits 763d541, 288d247.
+
+### 44. Resumability — the compiler-free foundation (#6 / #30 / D#32)
+Realized the reserved `listen` descriptor seam (D#30) end-to-end with **zero reactive-core change**. String
+backend `listen` serializes a `HandlerDescriptor` → `on:<type>="<idx>"` + a per-render capture table that
+`renderToString` flushes as `<script type="application/pimas-state">` (a page with no handlers emits nothing
+— 0-KB-static preserved). New renderer-free **`pimas/resume`** entry: a qwikloader-style **capture-phase**
+dispatcher (`resume()` + `registerHandler`, the compiler-free stand-in for `import()`) resolves ref→handler
+and invokes with capture — a server tree becomes interactive with **zero component re-execution** (verified
+in real Chrome incl. a non-bubbling focus event, which is why capture phase, not delegation-on-bubble). This
+re-introduces the delegation D#9 rejected, but scoped: resume-only + opt-in per root; islands still
+direct-bind. The wire contract + a **type-tagged codec** (`encode`/`decode`, realizing the D#32 reserved
+encoder) live in a zero-dep `wire.ts` so the client decoder ships **without** the renderer; captures
+round-trip undefined/NaN/±Inf/-0/bigint/Date/Map/Set/RegExp as single-key `{$:tag}` sentinels over a JSON
+replacer/reviver (encode throws on functions / sentinel-shaped objects → fail-loud not silent-corrupt;
+decode drops `__proto__`). A golden create-order test locks the D#31 invariant positional resume depends on.
+Sizes re-baselined: resume 900, server 1350→1900. Commits d47a770, 9cdcd5a.
+
+### 45. Compiler — Phase A thunk-eraser shipped; Phase D staged (#4 / #12)
+Walked back #41's "supersedes the compiler" doubt: built Phase A as a **pure build-time optimizer targeting
+the existing runtime** (D#14), the wedge toward automatic resumability. `src/compiler/` (`pimas/compiler`):
+TypeScript is used as a **parser only** (no TS emit, no new runtime dep); `detect.ts` collects reactive JSX
+binding ranges, `transform.ts` splices `() => (…)` right-to-left (line-stable, so source maps stay valid),
+`plugin.ts` is an `enforce:"pre"` Vite plugin running **before** JSX desugar so esbuild still owns
+factory/dev-prod/maps. Author writes `{count()}`; the compiler emits the thunk. Detection mirrors the runtime
+exactly (intrinsic children + non-`ref`/non-`on*` attrs; components stay opaque, D#28); biased to **over-wrap**
+(a false positive is a harmless one-shot effect; a false negative is the D#21 staleness footgun). **Phase C
+(footgun-kill) falls out for free** — the inline reactive read becomes the path of least resistance, retiring
+the still-unbuilt D#21 dev-warning (closed #9). Never imported by a runtime entry → out of every size budget;
+`typescript` an optional peer dep. Phase D (resumability) staged D1→D4: D1 closure→descriptor (narrow —
+`encode` throws on captured signal closures, so only import/global-closing handlers auto-serialize), D2 lazy
+handler chunks (needs bundler cooperation + the two-pass island build in the **site repos**), D3 signal-state
+channel, **D4 = the deferred claim/hydrate backend (D#31), the actual live-state payoff — trigger-gated** (a
+resumed signal write repaints nothing until it exists). D0 (shared classification, `jsx.ts`, prevents A/D
+drift) landed as prep. Commits c168736, 4b4eb77.
+
+### 46. Agent-surface hardening — three P0 fixes to `pimas/agent` (#13)
+**Listener isolation:** `emit` runs inside the exposing effect, so a throwing agent-side listener was
+propagating into the host's reactive flush (breaking siblings + the effect) — now re-thrown on a microtask
+so it still surfaces without entangling the graph. **L2 change-log:** a bounded ring buffer + `history(limit?)`
+(was last-cause only via `explain()`) satisfies the literal "change log" clause of the L2 spec. **Async
+provenance:** `call()` captured `writes`/`changed` synchronously in a `finally`, so an `async` action's
+awaited writes (past the first await) were missed → empty CauseRecord; now, when the action returns a
+thenable, provenance is deferred until it settles (`call` returns a promise resolving post-capture; sync
+actions byte-for-byte unchanged; a rejection records nothing). Commits 3a0b004, c01cac5, d8428ca.

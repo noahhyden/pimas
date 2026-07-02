@@ -21,6 +21,8 @@ tree-shaken away (every entry is pure ESM + `"sideEffects": false`).
 | `pimas/store` | `createStore` — nested reactive proxy (fine-grained per-field). **Headless.** | the core |
 | `pimas/agent` | 🔬 **experimental** — expose the reactive graph to an AI agent: subscribe to live state (L1), causal provenance (L2), deterministic what-if `speculate` (L3). **Headless.** | the core |
 | `pimas/agent/webmcp` | 🔬 **experimental** — project a bridge onto the WebMCP browser API (`document.modelContext` tools). | `pimas/agent` |
+| `pimas/resume` | 🔬 **experimental** — `resume()` client dispatcher that wires a server-rendered tree's serialized handlers to live events **without re-running components**. Renderer-free. | the zero-dep wire contract only |
+| `pimas/compiler` | 🔬 **experimental**, build-time only — Phase A thunk-eraser (`{count()}` → `{() => count()}`) as an `enforce:"pre"` Vite plugin. Uses `typescript` (optional peer) as a parser; never in a runtime bundle. | — |
 | `pimas/jsx-runtime`, `pimas/jsx-dev-runtime` | automatic JSX runtime for TS's `react-jsx` transform | the renderer |
 
 The renderer is parameterized over a small `RenderBackend` contract, so `pimas/dom`
@@ -78,7 +80,7 @@ render(() => <Counter />, document.body); // only the text node updates on click
 | **6 — Agent-native** | expose the reactive graph to an AI agent — subscribe (L1), causal provenance (L2), deterministic what-if `speculate` (L3), WebMCP projection; proven on a real HTTP stack | 🔬 exploration |
 
 Real-browser tests live in `browser-test/` (`npm run test:browser`, drives a real Chrome;
-101 vitest + 15 browser tests green). Architecture rationale for every choice is in
+163 vitest + 18 browser tests green). Architecture rationale for every choice is in
 [`DECISIONS.md`](DECISIONS.md); the phase tracker is [issue #1](../../issues/1).
 
 ### Phase 5
@@ -93,15 +95,30 @@ Real-browser tests live in `browser-test/` (`npm run test:browser`, drives a rea
 - **Islands** — interactive widgets ship as their own lazy-loaded, code-split bundles
   (`load`/`idle`/`visible`); the rest of the page stays 0 KB JS and is client-rendered on demand.
   One shared pimas kernel chunk across all islands (no dual-kernel hazard).
-- **`listen` seam** takes a closure *or* a serializable handler descriptor `{ref, load, capture}`
-  — the door to Qwik-style resumability is held open without paying for it yet.
+- **`listen` seam** takes a closure *or* a serializable handler descriptor `{ref, load, capture}`.
 - **Dogfood:** klarum.com rebuilt on pimas (branch `pimas-port` of the landing repo) — 19 routes,
   0 KB JS on static pages, a 10-demo interactive `/showcase/` (records/pricing/analytics-charts/
   agent-playback/knowledge-graph SVG/…), verified across static reactivity + browser interaction +
   runtime timers.
-- **Deferred to a later phase** (tracked in issues): a microtask scheduler, the compiler
-  (thunk-eraser), store `produce`/`reconcile`, the claim/hydrate backend, resumability, and a
-  dev-mode `<Show>`/thunk-staleness warning.
+
+### Since (resumability + compiler + store v2)
+
+- **`createStore` v2** — `reconcile(next, {key})` diffs external data in preserving row identity (a
+  server-refreshed keyed `<For>` reuses/moves DOM rows, never rebuilds); `produce(fn)` is Immer-style
+  mutable-draft sugar over the fine-grained setter. Both are tree-shakeable tagged updaters. (D#43)
+- **Resumability (compiler-free foundation)** — the string backend serializes handler descriptors →
+  `on:<type>` + an `application/pimas-state` capture table; the renderer-free **`pimas/resume`**
+  dispatcher makes a server tree interactive with **zero component re-execution** (real-Chrome verified,
+  incl. non-bubbling focus via capture phase). A zero-dep **type-tagged codec** (`encode`/`decode`) makes
+  captures round-trip Dates/Maps/typed rows. (D#44)
+- **Compiler — Phase A (`pimas/compiler`)** — the thunk-eraser: write `{count()}`, it emits the
+  `() => (…)` thunk at build time (TypeScript-as-parser Vite plugin; zero runtime change; out of every
+  size budget). The wedge toward automatic resumability (Phase D, staged D1→D4). (D#45)
+- **Agent-surface hardening** — bridge listener isolation, an L2 change-log (`history()`), and correct
+  L2 provenance for async actions. (D#46)
+- **Still deferred** (tracked in issues): a microtask scheduler (#3), compiler Phase B (templates) /
+  Phase D (D2+ lazy handler chunks, live-state resume) and the claim/hydrate backend (#6/#12) — the
+  last are bundler/site-repo-coupled or trigger-gated on a dogfood target.
 
 ### Agent-native (exploration — issue [#13](../../issues/13), rationale in [`AGENT-NATIVE.md`](AGENT-NATIVE.md))
 
