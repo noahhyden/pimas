@@ -133,6 +133,56 @@ describe("agent bridge — L1 subscribe (issue #13)", () => {
     bridge.dispose();
   });
 
+  it("isolates a throwing listener: siblings still receive, host graph stays intact", () => {
+    // emit() runs INSIDE the exposing effect, so an unguarded listener throw
+    // would break sibling listeners AND the host's reactive flush. The throw is
+    // re-raised on a microtask so it still surfaces without entangling the graph.
+    const microtaskErrors: unknown[] = [];
+    const spy = vi.spyOn(globalThis, "queueMicrotask").mockImplementation((cb) => {
+      try {
+        cb();
+      } catch (err) {
+        microtaskErrors.push(err);
+      }
+    });
+
+    try {
+      const [n, setN] = createSignal(0);
+      const bridge = createAgentBridge((r) => r.expose("n", () => n()));
+
+      const boom = new Error("listener blew up");
+      // throw only on the delta (not the initial replay, which runs on the
+      // agent's own subscribe() stack — the fix targets emit(), which fires
+      // inside the host's exposing effect)
+      const bad = vi.fn((e: AgentEvent) => {
+        if (e.kind === "state" && !e.initial) throw boom;
+      });
+      const good = vi.fn();
+      bridge.subscribe(bad); // registered first, so it fires first
+      bridge.subscribe(good);
+      bad.mockClear();
+      good.mockClear();
+      microtaskErrors.length = 0;
+
+      // A bad listener throwing must not prevent `good` from being delivered,
+      // and must not throw out of the host signal write.
+      expect(() => setN(1)).not.toThrow();
+      expect(bad).toHaveBeenCalledTimes(1);
+      expect(good).toHaveBeenCalledTimes(1);
+      expect(good).toHaveBeenCalledWith({ kind: "state", name: "n", value: 1, initial: false });
+      // the error was surfaced (not swallowed), just deferred off the flush
+      expect(microtaskErrors).toEqual([boom]);
+
+      // the exposing effect is still live — a second write still pushes
+      expect(() => setN(2)).not.toThrow();
+      expect(good).toHaveBeenCalledWith({ kind: "state", name: "n", value: 2, initial: false });
+
+      bridge.dispose();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it("stops pushing after dispose", () => {
     const [n, setN] = createSignal(0);
     const bridge = createAgentBridge((r) => r.expose("n", () => n()));

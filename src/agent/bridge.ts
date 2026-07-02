@@ -110,7 +110,21 @@ export function createAgentBridge(setup: (r: AgentRegistrar) => void, opts: Agen
     // untrack so a listener that happens to read a signal never subscribes the
     // exposing effect to it — the agent observes, it must not entangle the graph.
     untrack(() => {
-      for (const l of listeners) l(e);
+      for (const l of listeners) {
+        // Isolate each listener: `emit` runs INSIDE the exposing effect (see
+        // `expose`), so a throwing agent-side listener would otherwise propagate
+        // into the host's reactive flush — breaking sibling listeners and the
+        // exposing effect itself. Re-throw on a microtask so the error still
+        // surfaces (global onerror / unhandledRejection) without entangling or
+        // corrupting the synchronous host update.
+        try {
+          l(e);
+        } catch (err) {
+          queueMicrotask(() => {
+            throw err;
+          });
+        }
+      }
     });
   };
 
