@@ -67,7 +67,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "build": "tsc -p tsconfig.build.json",
     "size": "node scripts/size.mjs",
-    "test:browser": "vite"
+    "test:browser": "vite",
+    "prepack": "tsc -p tsconfig.build.json"
   },
   "keywords": ["reactive", "signals", "ui", "framework", "fine-grained"],
   "peerDependencies": {
