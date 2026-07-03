@@ -21,6 +21,7 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - run: node scripts/check-package.mjs # supply-chain guard: zero runtime deps
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
