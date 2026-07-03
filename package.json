@@ -1,11 +1,14 @@
 {
-  "name": "pimas",
+  "name": "pimas-ui",
   "version": "0.1.0",
   "description": "A fine-grained reactive UI framework. Own your stack.",
   "type": "module",
   "license": "MIT",
   "author": "Noah Hyden",
-  "repository": { "type": "git", "url": "git+https://github.com/noahhyden/pimas.git" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/noahhyden/pimas.git"
+  },
   "homepage": "https://github.com/noahhyden/pimas#readme",
   "bugs": "https://github.com/noahhyden/pimas/issues",
   "sideEffects": false,
@@ -60,7 +63,10 @@
     },
     "./package.json": "./package.json"
   },
-  "files": ["dist", "src"],
+  "files": [
+    "dist",
+    "src"
+  ],
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
@@ -70,7 +76,13 @@
     "test:browser": "vite",
     "prepack": "tsc -p tsconfig.build.json"
   },
-  "keywords": ["reactive", "signals", "ui", "framework", "fine-grained"],
+  "keywords": [
+    "reactive",
+    "signals",
+    "ui",
+    "framework",
+    "fine-grained"
+  ],
   "peerDependencies": {
     "typescript": ">=5"
   },
