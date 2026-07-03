@@ -33,6 +33,7 @@ jobs:
       - run: npm install -g npm@latest # ensure OIDC/provenance support
       - run: npm ci
       # Re-verify the exact source we're about to ship — defense in depth.
+      - run: node scripts/check-package.mjs # refuse to publish if runtime deps leaked in
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
