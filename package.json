@@ -1,10 +1,13 @@
 {
   "name": "pimas",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "A fine-grained reactive UI framework. Own your stack.",
   "type": "module",
   "license": "MIT",
   "author": "Noah Hyden",
+  "repository": { "type": "git", "url": "git+https://github.com/noahhyden/pimas.git" },
+  "homepage": "https://github.com/noahhyden/pimas#readme",
+  "bugs": "https://github.com/noahhyden/pimas/issues",
   "sideEffects": false,
   "exports": {
     ".": {
