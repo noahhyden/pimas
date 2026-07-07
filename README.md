@@ -28,7 +28,7 @@ pure ESM + `"sideEffects": false`). Run `npm run size` for the per-import gzip c
 | Import | What | gzip |
 | --- | --- | --- |
 | `pimas` | reactive core – `createSignal`/`createEffect`/`createMemo`/`batch`/`untrack`/`onCleanup`/`createRoot`, `createContext`/`useContext`. **Headless** (browser *or* Node). | 752 B |
-| `pimas/dom` | DOM renderer – `render`/`h`/`Fragment`/`onMount`, automatic JSX runtime. | 1999 B |
+| `pimas/dom` | DOM renderer – `render`/`h`/`Fragment`/`onMount`, two-way form binding (`model`/`modelChecked`/`modelNumber`), automatic JSX runtime. | 1999 B |
 | `pimas/server` | `renderToString` – the *same* components rendered to HTML (SSR / static prerender). | 1906 B |
 | `pimas/flow` | control flow – `<Show>`/`<Switch>`/`<Match>`, keyed `<For>`, position-keyed `<Index>`, `<ErrorBoundary>`. | 704 B–1.4 KB |
 | `pimas/store` | `createStore` – nested reactive proxy, fine-grained per-field; `reconcile`/`produce`. **Headless.** | 1713 B |
