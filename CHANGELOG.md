@@ -7,6 +7,31 @@ versions may carry breaking changes; the 🔬 experimental surfaces especially.
 
 The full design rationale for every decision lives in [`DECISIONS.md`](docs/DECISIONS.md).
 
+## [0.1.1] — 2026-07-07
+
+First release published through the CI pipeline (OIDC trusted publishing +
+provenance). Additive and non-breaking over 0.1.0.
+
+### Added
+- **Typed JSX** — intrinsic elements now carry real types: misspelled tags and
+  unknown attributes on well-known elements are caught at compile time, while
+  reactive thunks, `data-*`/`aria-*`, custom elements, and `HandlerDescriptor`
+  event handlers stay allowed. SVG is intentionally permissive. (#18, #26)
+- **Getting Started guide** (`docs/GETTING-STARTED.md`) — install, JSX setup,
+  first component, reactivity, control flow, stores, SSR. (#18)
+- **`LICENSE`** file (MIT) — declared before, now actually shipped. (#17)
+
+### Changed
+- **Smaller install** — sourcemaps (`.js.map`/`.d.ts.map`) are no longer
+  published; readable `src/` still ships. Tarball dropped ~108→66 files. (#24)
+- Long-form design docs moved under `docs/` to keep the repo root clean. (#17)
+
+### Removed
+- The downstream-canary CI workflow (a framework shouldn't dispatch into
+  consumer repos). (#24)
+
+[0.1.1]: https://github.com/noahhyden/pimas/releases/tag/v0.1.1
+
 ## [0.1.0] — 2026-07-03
 
 First tagged release. A from-scratch fine-grained reactive UI framework — same
