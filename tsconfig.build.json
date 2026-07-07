@@ -1,9 +1,12 @@
 {
+  "//": "Trim install size: emit dist/*.js + *.d.ts but NO sourcemaps (sourceMap/declarationMap off). src/ still ships for transparency; editor go-to-def lands on the .d.ts.",
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "outDir": "./dist",
     "rootDir": "./src",
-    "noEmit": false
+    "noEmit": false,
+    "sourceMap": false,
+    "declarationMap": false
   },
   "include": ["src"],
   "exclude": ["test"]

@@ -6,11 +6,15 @@ name: Publish to npm
 # anyone's laptop — and npm records a verifiable "Built and signed on GitHub
 # Actions" attestation linking the package to this exact commit + workflow.
 #
-# Auth uses npm Trusted Publishing (OIDC) — no long-lived token to leak. Configure
-# it once on npmjs.com: package `pimas` → Settings → Trusted Publisher →
-# GitHub Actions, repo noahhyden/pimas, workflow "publish.yml". (Token fallback:
-# add an NPM_TOKEN secret and set `NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}` on
-# the publish step — but trusted publishing is preferred.)
+# Auth: for a package that already exists on npm, prefer Trusted Publishing (OIDC)
+# — no long-lived token to leak. Configure it once on npmjs.com: package `pimas-ui`
+# → Settings → Trusted Publisher → GitHub Actions, repo noahhyden/pimas, workflow
+# "publish.yml", then you can delete the NPM_TOKEN secret below.
+#
+# FIRST publish (the package does not exist yet, so a trusted publisher can't be
+# configured): add an `NPM_TOKEN` repo secret (an npm "Automation" token). The
+# publish step reads it via NODE_AUTH_TOKEN. `--provenance` still works with a
+# token because `id-token: write` is granted below.
 on:
   release:
     types: [published]
@@ -38,4 +42,8 @@ jobs:
       - run: npm test
       - run: npm run build
       # prepack rebuilds dist; --provenance emits the signed attestation.
+      # NODE_AUTH_TOKEN is read from the NPM_TOKEN secret (first publish / token
+      # auth); leave the secret unset once OIDC trusted publishing is configured.
       - run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
