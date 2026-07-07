@@ -5,6 +5,8 @@ DOM, no in-browser transpiler, **zero runtime dependencies**. Same engine class
 as [SolidJS](https://www.solidjs.com/): values are *observable*, and only the
 exact DOM nodes that read a changed value update. There is no diffing.
 
+![An agent streams run-state updates into the same UI rendered two ways. On each change, React re-renders and diffs the whole subtree (every node flashes; "component re-renders" climbs to 36), while Pimas updates only the one node that read the value ("DOM nodes updated" reaches just 6). No virtual DOM, no diffing.](docs/demo.gif)
+
 But the framework is also the **lab** for the thing that makes pimas worth owning
 as a small, sharp project: a from-scratch fine-grained engine is, incidentally, a
 **live machine-readable model of the page** – one an AI agent can *subscribe* to,
