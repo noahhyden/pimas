@@ -6,15 +6,19 @@ name: Publish to npm
 # anyone's laptop — and npm records a verifiable "Built and signed on GitHub
 # Actions" attestation linking the package to this exact commit + workflow.
 #
-# Auth: for a package that already exists on npm, prefer Trusted Publishing (OIDC)
-# — no long-lived token to leak. Configure it once on npmjs.com: package `pimas-ui`
-# → Settings → Trusted Publisher → GitHub Actions, repo noahhyden/pimas, workflow
-# "publish.yml", then you can delete the NPM_TOKEN secret below.
+# Auth: npm Trusted Publishing (OIDC) — NO long-lived token, nothing to leak.
+# npm mints a short-lived credential from the `id-token` below at publish time.
+# Configure it once on npmjs.com: package `pimas-ui` → Settings → Trusted
+# Publisher → GitHub Actions, user/org noahhyden, repo pimas, workflow filename
+# "publish.yml", allowed action "npm publish". (Then, recommended: package →
+# Publishing access → "Require 2FA and disallow tokens".)
 #
-# FIRST publish (the package does not exist yet, so a trusted publisher can't be
-# configured): add an `NPM_TOKEN` repo secret (an npm "Automation" token). The
-# publish step reads it via NODE_AUTH_TOKEN. `--provenance` still works with a
-# token because `id-token: write` is granted below.
+# BOOTSTRAP (one-time): npm has no pre-registration for a package that doesn't
+# exist yet, so a trusted publisher can't be configured until `pimas-ui` exists.
+# Publish v0.1.0 ONCE from a maintainer machine (`npm login` + `npm publish
+# --access public` — interactive 2FA, no CI token), then set up the trusted
+# publisher above. Every release after that runs here, tokenless, with provenance.
+# Requires npm >= 11.5.1 and Node >= 22.14 (satisfied by node 24 + npm@latest).
 on:
   release:
     types: [published]
@@ -42,8 +46,6 @@ jobs:
       - run: npm test
       - run: npm run build
       # prepack rebuilds dist; --provenance emits the signed attestation.
-      # NODE_AUTH_TOKEN is read from the NPM_TOKEN secret (first publish / token
-      # auth); leave the secret unset once OIDC trusted publishing is configured.
+      # No NODE_AUTH_TOKEN: OIDC trusted publishing supplies the credential from
+      # the id-token permission above (a stray empty token env can shadow OIDC).
       - run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
