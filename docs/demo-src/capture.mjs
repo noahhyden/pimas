@@ -2,14 +2,15 @@
  * Records docs/demo.gif from the live demo page (docs/demo-src/, served by
  * `vite --config docs/demo-src/vite.config.ts` on :5184).
  *
- * It walks a frame table, screenshots each `?count=&flash=` state with headless
- * Chromium, then encodes the PNGs into an animated GIF with gifenc — no ffmpeg
- * required. This is the reproducible source-of-truth for the README animation,
- * the same role docs/demo.tape plays for ataegina-cli.
+ * The page renders a full, deterministic frame for any `?f=<n>`; this script
+ * screenshots f = 0 … FRAME_COUNT-1 with headless Chromium, merges identical
+ * consecutive frames (lossless), and encodes them into an animated GIF with
+ * gifenc — no ffmpeg. It is the reproducible source-of-truth for the README
+ * animation, the same role docs/demo.tape plays for ataegina-cli.
  *
  *   node docs/demo-src/capture.mjs
  *
- * Deps: gifenc, pngjs (dev-only; install if missing). Chromium on PATH.
+ * Deps: gifenc, pngjs (devDependencies). Chromium on PATH (or set CHROMIUM).
  */
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
@@ -26,35 +27,20 @@ const outGif = resolve(here, "..", "demo.gif");
 
 const URL_BASE = "http://localhost:5184/";
 const CHROMIUM = process.env.CHROMIUM || "chromium";
-const W = 760;
-const H = 430;
-const DELAY = 90; // ms per frame
+const W = 1120;
+const H = 600;
+const DELAY = 150; // ms per raw frame (merged holds accumulate)
 
-// Frame table: hold on each value, flash-decay on each change. Loops cleanly.
-const FLASH = [0.5, 0.34, 0.2, 0.1, 0.03];
-const frames = [];
-const hold = (count, n) => {
-  for (let i = 0; i < n; i++) frames.push({ count, flash: 0 });
-};
-const change = (count) => {
-  for (const flash of FLASH) frames.push({ count, flash });
-  hold(count, 4);
-};
-hold(0, 5);
-change(1);
-change(2);
-change(3);
-hold(3, 4);
+// Must match the timeline in demo.ts: intro(2) + EVENTS(6) * [flash(3)+settle(2)] + outro(3).
+const FRAME_COUNT = 2 + 6 * (3 + 2) + 3; // = 35
 
 mkdirSync(framesDir, { recursive: true });
 
-// Pass 1: screenshot every frame and keep its RGBA buffer.
+// Pass 1: screenshot every frame, keep its RGBA buffer.
 const buffers = [];
 let dims = null;
-for (let i = 0; i < frames.length; i++) {
-  const { count, flash } = frames[i];
+for (let i = 0; i < FRAME_COUNT; i++) {
   const file = resolve(framesDir, `f${String(i).padStart(3, "0")}.png`);
-  const url = `${URL_BASE}?count=${count}&flash=${flash}`;
   execFileSync(
     CHROMIUM,
     [
@@ -66,25 +52,26 @@ for (let i = 0; i < frames.length; i++) {
       `--window-size=${W},${H}`,
       "--default-background-color=0b0b0dff",
       `--screenshot=${file}`,
-      url,
+      `${URL_BASE}?f=${i}`,
     ],
     { stdio: "ignore" },
   );
   const png = PNG.sync.read(readFileSync(file));
   dims ??= { width: png.width, height: png.height };
   buffers.push(new Uint8Array(png.data.buffer, png.data.byteOffset, png.data.length));
-  process.stdout.write(`\rshoot ${i + 1}/${frames.length}`);
+  process.stdout.write(`\rshoot ${i + 1}/${FRAME_COUNT}`);
 }
 
-// One global palette for the whole clip (this content has few colors), sampled
-// from a no-flash frame and a peak-flash frame so the greens are represented.
-const sample = new Uint8Array(buffers[0].length + buffers[5].length);
-sample.set(buffers[0], 0);
-sample.set(buffers[5], buffers[0].length);
+// One global palette for the whole clip. Sample a flash frame and a settle
+// frame so both accent colors and the base UI are represented.
+const s1 = buffers[3]; // first flash of event 0
+const s2 = buffers[buffers.length - 1]; // final settle
+const sample = new Uint8Array(s1.length + s2.length);
+sample.set(s1, 0);
+sample.set(s2, s1.length);
 const palette = quantize(sample, 64);
 
-// Collapse runs of identical frames into one frame with a longer delay — the
-// long "hold" states are pixel-identical, so this is lossless but much smaller.
+// Merge runs of identical frames into one frame with a longer delay (lossless).
 const equal = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
 const merged = [];
 for (const buf of buffers) {
@@ -93,7 +80,7 @@ for (const buf of buffers) {
   else merged.push({ buf, delay: DELAY });
 }
 
-// Pass 2: encode. Palette is written once (global table); frames reference it.
+// Pass 2: encode. Palette written once (global table); frames reference it.
 const gif = GIFEncoder();
 for (let i = 0; i < merged.length; i++) {
   const index = applyPalette(merged[i].buf, palette);
