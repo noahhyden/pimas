@@ -147,8 +147,38 @@ const html = renderToString(() => <Counter />);
 To make server-rendered HTML interactive on the client, see the experimental
 `pimas-ui/resume` and `pimas-ui/hydrate` (`claim()`) surfaces.
 
+## 8. Accessibility
+
+pimas has no synthetic event system and no attribute allow-list — it sets what you
+write straight onto the real DOM node and dispatches native events. So standard
+accessibility techniques work as-is, and the typed JSX keeps them ergonomic:
+
+- **ARIA & roles.** `role` and every `aria-*` attribute are accepted (and `aria-*`
+  is always allowed by the types). Use thunks for the reactive ones:
+  ```tsx
+  <button aria-pressed={() => String(on())} aria-label="Mute">…</button>
+  <div role="status" aria-live="polite">{() => msg()}</div>
+  ```
+- **Labels.** `<label for={id}>` (or `htmlFor`) is typed on `<label>`; pair it with
+  a matching input `id`.
+- **Focus management.** Move focus after mount with `onMount` + a `ref` (a plain
+  effect would see a detached node):
+  ```tsx
+  let el; onMount(() => el?.focus()); return <input ref={(n) => (el = n)} />;
+  ```
+  And because keyed `<For>` **moves** DOM rows on reorder (via `moveBefore`) rather
+  than rebuilding them, focus and selection survive a list reorder — the correct
+  behavior for keyboard users.
+- **No focus traps from re-render.** Fine-grained updates change only the nodes that
+  read a changed value, so typing in one field never re-creates (and blurs) another.
+
+There's no pimas-specific a11y magic to learn — that's the point. Test with a
+screen reader and keyboard as you would any real-DOM app. (Tracking further a11y
+examples/tests in issue #23.)
+
 ## Where to go next
 
 - **[README](../README.md)** — how the engine works and what makes it different.
+- **[`STABILITY.md`](STABILITY.md)** — which APIs are stable vs 🔬 experimental, and the versioning policy.
 - **[`DECISIONS.md`](DECISIONS.md)** — the rationale for every architectural choice.
 - **[`AGENT-NATIVE.md`](AGENT-NATIVE.md)** — the experimental agent-simulatable surface.

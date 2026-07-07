@@ -389,9 +389,12 @@ recharts with ~1.3 KB) – the framework's own proving ground.
 | **Resumability + store v2 + compiler A** | `resume`/`hydrate` `claim()`, `reconcile`/`produce`, thunk-eraser plugin, scheduler seam | ✅ |
 | **6 – Agent-native** | L1 subscribe / L2 explain / L3 `speculate` + plan/sweep/commit, WebMCP `simulate_*` projection; validated on two quantitative models + a real HTTP stack | 🔬 exploration |
 
-195 vitest + a real-Chrome browser suite (`npm run test:browser`) green. First tagged
-release `0.1.0`. Rationale for every choice: [`DECISIONS.md`](docs/DECISIONS.md); the
-agent-native thesis: [`AGENT-NATIVE.md`](docs/AGENT-NATIVE.md).
+207 vitest + a real-Chrome browser suite (31 tests, run headless in CI) green.
+Published on npm as [`pimas-ui`](https://www.npmjs.com/package/pimas-ui) with signed
+provenance. Docs: [Getting Started](docs/GETTING-STARTED.md) ·
+[Stability & versioning](docs/STABILITY.md) · design rationale in
+[`DECISIONS.md`](docs/DECISIONS.md) · the agent-native thesis in
+[`AGENT-NATIVE.md`](docs/AGENT-NATIVE.md).
 
 ## Develop
 
