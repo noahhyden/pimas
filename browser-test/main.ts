@@ -9,6 +9,8 @@ import "./tests/svg.test";
 import "./tests/focus-reorder.test";
 import "./tests/events.test";
 import "./tests/inputs.test";
+import "./tests/form.test";
+import "./tests/resource.test";
 import "./tests/on-mount.test";
 import "./tests/error-boundary.test";
 import "./tests/resume.test";
