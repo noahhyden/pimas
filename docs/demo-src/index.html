@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pimas — demo</title>
+    <style>
+      html, body { margin: 0; height: 100%; }
+      body {
+        display: grid;
+        place-items: center;
+        background: #0b0b0d;
+        font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+        color: #d7d7da;
+      }
+      #stage { width: 760px; padding: 28px; box-sizing: border-box; }
+
+      .card { background: #141418; border: 1px solid #26262b; border-radius: 14px; overflow: hidden; }
+      .bar { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid #26262b; }
+      .dot { width: 11px; height: 11px; border-radius: 50%; }
+      .bar .label { margin-left: 8px; color: #8a8a92; font-size: 13px; }
+
+      .body { padding: 30px 34px 26px; }
+      .line { font-size: 30px; display: flex; align-items: center; gap: 16px; }
+      .static { color: #d7d7da; }
+      .pill {
+        position: relative; display: inline-grid; place-items: center;
+        min-width: 62px; height: 62px; padding: 0 14px;
+        border-radius: 12px; background: #132a1c; border: 1px solid #2b5c3c;
+        color: #4ade80; font-weight: 700; font-size: 34px;
+      }
+      /* green flash overlay, driven per-frame by --flash (0..1) */
+      .pill::after {
+        content: ""; position: absolute; inset: 0; border-radius: 12px;
+        background: #4ade80; opacity: var(--flash, 0);
+      }
+
+      .btn {
+        margin-top: 26px; display: inline-block;
+        padding: 10px 18px; border-radius: 10px;
+        background: #1c1c22; border: 1px solid #33333b; color: #d7d7da; font-size: 15px;
+      }
+
+      .notes { margin-top: 26px; font-size: 14px; line-height: 1.7; }
+      .updated { color: #4ade80; font-weight: 700; }
+      .updated .bullet { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #4ade80; margin-right: 8px; vertical-align: middle; }
+      .muted { color: #8a8a92; }
+
+      .caption { margin-top: 22px; text-align: center; color: #8a8a92; font-size: 14px; }
+    </style>
+  </head>
+  <body>
+    <div id="stage">
+      <div class="card">
+        <div class="bar">
+          <span class="dot" style="background:#ff5f56"></span>
+          <span class="dot" style="background:#ffbd2e"></span>
+          <span class="dot" style="background:#27c93f"></span>
+          <span class="label">pimas — fine-grained, no virtual DOM</span>
+        </div>
+        <div class="body">
+          <div id="app"></div>
+          <div class="btn">increment ▸</div>
+          <div class="notes">
+            <div class="updated"><span class="bullet"></span><span id="upd">1 DOM node re-ran</span></div>
+            <div class="muted">header · button · layout — 0 repaints, ever</div>
+          </div>
+        </div>
+      </div>
+      <div class="caption">Change one value — only the exact node that read it re-runs. No virtual DOM. No diff.</div>
+    </div>
+    <script type="module" src="./demo.ts"></script>
+  </body>
+</html>

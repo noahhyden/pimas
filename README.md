@@ -5,7 +5,7 @@ DOM, no in-browser transpiler, **zero runtime dependencies**. Same engine class
 as [SolidJS](https://www.solidjs.com/): values are *observable*, and only the
 exact DOM nodes that read a changed value update. There is no diffing.
 
-![Incrementing a signal re-runs only the single DOM node that read count(); the surrounding static markup never repaints. No virtual DOM, no diffing.](docs/assets/demo.svg)
+![Incrementing a signal re-runs only the single DOM node that read count(); the header, button, and layout never repaint. No virtual DOM, no diffing.](docs/demo.gif)
 
 But the framework is also the **lab** for the thing that makes pimas worth owning
 as a small, sharp project: a from-scratch fine-grained engine is, incidentally, a

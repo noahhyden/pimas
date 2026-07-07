@@ -98,7 +98,9 @@
   },
   "devDependencies": {
     "esbuild": "^0.24.2",
+    "gifenc": "^1.0.3",
     "happy-dom": "^16.5.3",
+    "pngjs": "^7.0.0",
     "typescript": "^5.7.2",
     "vite": "^6.0.7",
     "vitest": "^3.0.5"
