@@ -78,6 +78,7 @@
     "build": "tsc -p tsconfig.build.json",
     "size": "node scripts/size.mjs",
     "test:browser": "vite",
+    "test:browser:ci": "node scripts/browser-ci.mjs",
     "prepack": "tsc -p tsconfig.build.json"
   },
   "keywords": [

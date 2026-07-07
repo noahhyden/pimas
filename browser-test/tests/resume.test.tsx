@@ -56,8 +56,14 @@ test("capture-phase dispatch reaches a NON-BUBBLING event (focus)", () => {
   const stop = resume({ root: m.container });
 
   // A real focus() fires a non-bubbling `focus` event; a bubble-only delegator
-  // would never see it. Capture-phase registration does.
-  m.container.querySelector("input")!.focus();
+  // would never see it — capture-phase registration does. But `focus()` only
+  // DISPATCHES a focus event when the window has OS focus, so under a headless /
+  // background browser (CI) it's a no-op. Try the real path first; if the window
+  // isn't focused, dispatch the non-bubbling event directly — either way this
+  // still exercises the thing under test: capture-phase reaching a non-bubbler.
+  const input = m.container.querySelector("input")!;
+  input.focus();
+  if (focused === 0) input.dispatchEvent(new FocusEvent("focus"));
 
   expect(focused).toBe(1);
 
