@@ -65,7 +65,7 @@ one has, and they're only cheap on a fine-grained reactive graph.**
 ## Why pimas specifically can do L3 (and a VDOM can't)
 
 The engine is **pull-based, and topology is separate from value** (see
-[`src/reactive/reactive.ts`](src/reactive/reactive.ts)): memos compute lazily on
+[`src/reactive/reactive.ts`](../src/reactive/reactive.ts)): memos compute lazily on
 read via `updateIfNecessary`; the dependency DAG (`sources`/`observers`) is
 structure, held apart from the cached `value`/`state` (3-color) on each node. That
 is exactly what makes a hypothetical evaluable:
@@ -164,7 +164,7 @@ reimplementation of `speculate`.
 
 ## What this reframe changes about the roadmap
 
-- The **compiler** ([#12](../../issues/12)) is a *UI-rendering* optimization —
+- The **compiler** ([#12](../../../issues/12)) is a *UI-rendering* optimization —
   near-zero value to an agent surface. It stays parked; this pivot likely
   supersedes the reason to ever build it.
 - **Byte-golfing** and the DOM reconciler matter only insofar as pimas stays a

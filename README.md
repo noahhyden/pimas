@@ -257,7 +257,7 @@ flag is the A/B switch for the eval in §3.
 
 ## 2 – Why it works this way
 
-The rationale for every choice lives in [`DECISIONS.md`](DECISIONS.md) (53 numbered
+The rationale for every choice lives in [`DECISIONS.md`](docs/DECISIONS.md) (53 numbered
 entries). The load-bearing ones:
 
 | Decision | Why | D# |
@@ -386,8 +386,8 @@ recharts with ~1.3 KB) – the framework's own proving ground.
 | **6 – Agent-native** | L1 subscribe / L2 explain / L3 `speculate` + plan/sweep/commit, WebMCP `simulate_*` projection; validated on two quantitative models + a real HTTP stack | 🔬 exploration |
 
 195 vitest + a real-Chrome browser suite (`npm run test:browser`) green. First tagged
-release `0.1.0`. Rationale for every choice: [`DECISIONS.md`](DECISIONS.md); the
-agent-native thesis: [`AGENT-NATIVE.md`](AGENT-NATIVE.md).
+release `0.1.0`. Rationale for every choice: [`DECISIONS.md`](docs/DECISIONS.md); the
+agent-native thesis: [`AGENT-NATIVE.md`](docs/AGENT-NATIVE.md).
 
 ## Develop
 

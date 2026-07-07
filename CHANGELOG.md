@@ -5,7 +5,7 @@ All notable changes to pimas are documented here. The format follows
 [Semantic Versioning](https://semver.org/) from 0.1.0 onward. Pre-1.0: minor
 versions may carry breaking changes; the 🔬 experimental surfaces especially.
 
-The full design rationale for every decision lives in [`DECISIONS.md`](DECISIONS.md).
+The full design rationale for every decision lives in [`DECISIONS.md`](docs/DECISIONS.md).
 
 ## [0.1.0] — 2026-07-03
 
