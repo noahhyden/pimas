@@ -32,6 +32,7 @@ pure ESM + `"sideEffects": false`). Run `npm run size` for the per-import gzip c
 | `pimas/server` | `renderToString` – the *same* components rendered to HTML (SSR / static prerender). | 1906 B |
 | `pimas/flow` | control flow – `<Show>`/`<Switch>`/`<Match>`, keyed `<For>`, position-keyed `<Index>`, `<ErrorBoundary>`. | 704 B–1.4 KB |
 | `pimas/store` | `createStore` – nested reactive proxy, fine-grained per-field; `reconcile`/`produce`. **Headless.** | 1713 B |
+| `pimas/resource` | 🔬 `createResource` – async fetch as reactive state (`loading`/`error`/`refetch`/`mutate`). **Headless.** | opt-in |
 | `pimas/resume` | 🔬 renderer-free client dispatcher – wires a server tree's serialized handlers to live events **without re-running components**. | 878 B |
 | `pimas/hydrate` | 🔬 `claim()` – **adopts** the server-rendered DOM in place instead of discarding + client-rendering it. | 2412 B |
 | `pimas/agent` | 🔬 expose the reactive graph to an AI agent: subscribe (L1), causal provenance (L2), deterministic what-if `speculate` (L3). **Headless.** | opt-in, tree-shaken when unused |

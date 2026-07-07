@@ -16,6 +16,7 @@ export default defineConfig({
       { find: "pimas/hydrate", replacement: src("dom/claim.ts") },
       { find: "pimas/flow", replacement: src("flow/index.ts") },
       { find: "pimas/store", replacement: src("store/index.ts") },
+      { find: "pimas/resource", replacement: src("resource/index.ts") },
       { find: /^pimas$/, replacement: src("reactive/index.ts") },
     ],
   },
