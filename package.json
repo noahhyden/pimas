@@ -1,6 +1,6 @@
 {
   "name": "pimas-ui",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A fine-grained reactive UI framework. Own your stack.",
   "type": "module",
   "license": "MIT",
