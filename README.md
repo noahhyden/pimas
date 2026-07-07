@@ -16,6 +16,9 @@ Three questions organize the rest: **how it works** (mechanistically, in detail)
 **why it works this way** (the load-bearing decisions and what pimas is *different*
 from), and **what it lets you do** that nothing else can.
 
+> **New here?** The [Getting Started guide](docs/GETTING-STARTED.md) is the
+> hands-on path: install, first component, reactivity, control flow, stores, SSR.
+
 ## One package, subpath entry points
 
 `pimas` is a single package (published to npm as [`pimas-ui`](https://www.npmjs.com/package/pimas-ui)).
