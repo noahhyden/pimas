@@ -7,6 +7,21 @@ versions may carry breaking changes; the 🔬 experimental surfaces especially.
 
 The full design rationale for every decision lives in [`DECISIONS.md`](docs/DECISIONS.md).
 
+## [0.1.2] — 2026-07-07
+
+Additive, non-breaking over 0.1.1.
+
+### Added
+- **`pimas/resource`** (🔬) — `createResource`, an async data primitive: turns a
+  fetch into reactive state (value accessor + `loading`/`error`/`state` +
+  `refetch`/`mutate`). Race-safe (stale in-flight fetches are dropped). Kept off
+  the core hot-path floor. (#19)
+- **Two-way form binding** in `pimas/dom` — `model` / `modelChecked` /
+  `modelNumber`, spread onto a control to bind a signal both ways. Tree-shaken
+  when unused (dom budget unchanged). (#23)
+
+[0.1.2]: https://github.com/noahhyden/pimas/releases/tag/v0.1.2
+
 ## [0.1.1] — 2026-07-07
 
 First release published through the CI pipeline (OIDC trusted publishing +
