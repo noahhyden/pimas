@@ -12,6 +12,7 @@
       "pimas/hydrate": ["./src/dom/claim.ts"],
       "pimas/flow": ["./src/flow/index.ts"],
       "pimas/store": ["./src/store/index.ts"],
+      "pimas/resource": ["./src/resource/index.ts"],
       "pimas/jsx-runtime": ["./src/dom/jsx-runtime.ts"],
       "pimas/jsx-dev-runtime": ["./src/dom/jsx-dev-runtime.ts"]
     }

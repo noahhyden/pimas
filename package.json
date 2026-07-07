@@ -45,6 +45,10 @@
       "types": "./dist/store/index.d.ts",
       "import": "./dist/store/index.js"
     },
+    "./resource": {
+      "types": "./dist/resource/index.d.ts",
+      "import": "./dist/resource/index.js"
+    },
     "./agent": {
       "types": "./dist/agent/bridge.d.ts",
       "import": "./dist/agent/bridge.js"
