@@ -29,6 +29,7 @@ export function render(code: () => Child, container: Element): () => void {
 }
 
 export { h, Fragment, onMount } from "./engine.js";
+export { model, modelChecked, modelNumber } from "./form.js";
 export type {
   Child,
   Props,
