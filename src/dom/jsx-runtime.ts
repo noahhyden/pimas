@@ -6,6 +6,7 @@
  * "pimas"). Both forward to `h`; children live on `props.children`.
  */
 import { h, Fragment as _Fragment, type Child, type Props } from "./index.js";
+import type { IntrinsicElements as PimasIntrinsicElements } from "./jsx-types.js";
 
 export const Fragment = _Fragment;
 
@@ -17,15 +18,15 @@ export function jsx(type: Parameters<typeof h>[0], props: Props): Child {
 export const jsxs = jsx;
 
 /**
- * The JSX type namespace TS resolves through `jsxImportSource`. Permissive for
- * v1 — every intrinsic element accepts any props; tightened later.
+ * The JSX type namespace TS resolves through `jsxImportSource`. Intrinsic elements
+ * are typed (see `./jsx-types.ts`): misspelled tags and unknown attributes on
+ * well-known elements are caught, while thunks, `data-*`/`aria-*`, custom elements,
+ * and `HandlerDescriptor` event handlers all stay allowed. (Issue #18.)
  */
 export namespace JSX {
   export type Element = Child;
   export interface ElementChildrenAttribute {
     children: {};
   }
-  export interface IntrinsicElements {
-    [name: string]: Record<string, unknown> & { children?: Child };
-  }
+  export interface IntrinsicElements extends PimasIntrinsicElements {}
 }
