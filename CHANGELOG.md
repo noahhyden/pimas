@@ -7,6 +7,22 @@ versions may carry breaking changes; the 🔬 experimental surfaces especially.
 
 The full design rationale for every decision lives in [`DECISIONS.md`](docs/DECISIONS.md).
 
+## [Unreleased]
+
+Additive, non-breaking over 0.1.2.
+
+### Added
+- **Dependency-graph introspection** in `pimas/agent` (🔬) — `bridge.graph()`
+  returns a read-only snapshot of the reactive *topology*: the signal/memo nodes
+  the exposed state derives from (`{ id, kind, name? }`) and the directed
+  derives-from `edges` between them. The L0 structural read beneath L1 subscribe /
+  L2 explain / L3 simulate — the standing structure the kernel already keeps
+  (`sources`/`observers`), scoped to exactly what `descriptor()` exposes, so a
+  graph view / dev-tools surface can introspect the real topology instead of
+  hard-wiring it. Structure only; nodes carry stable ids (a `WeakMap`, so the core
+  node shape and size budgets are unchanged), and the walk tree-shakes away when
+  unused. (#37)
+
 ## [0.1.2] — 2026-07-07
 
 Additive, non-breaking over 0.1.1.

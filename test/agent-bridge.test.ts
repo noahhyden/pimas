@@ -397,3 +397,139 @@ describe("agent bridge — L1 subscribe (issue #13)", () => {
     expect(spy).not.toHaveBeenCalled();
   });
 });
+
+describe("agent bridge — L0 graph / topology introspection (issue #37)", () => {
+  it("reports the derives-from DAG (nodes + edges) of the exposed state", () => {
+    // The kernel's own diamond: D = B + C, B = C = A + 1.
+    const [a, setA] = createSignal(1);
+    const b = createMemo(() => a() + 1);
+    const c = createMemo(() => a() + 1);
+    const d = createMemo(() => b() + c());
+    const bridge = createAgentBridge((r) => r.expose("d", () => d()));
+
+    const g = bridge.graph();
+
+    // Four nodes: three memos (b, c, d) + one signal (a).
+    expect(g.nodes.length).toBe(4);
+    const byId = new Map(g.nodes.map((n) => [n.id, n]));
+    const signals = g.nodes.filter((n) => n.kind === "signal");
+    const memos = g.nodes.filter((n) => n.kind === "memo");
+    expect(signals.length).toBe(1); // a
+    expect(memos.length).toBe(3); // b, c, d
+
+    // The exposed name backs its (single) seed node.
+    const dNode = g.nodes.find((n) => n.name === "d")!;
+    expect(dNode.kind).toBe("memo");
+    expect(g.nodes.filter((n) => n.name !== undefined).length).toBe(1); // only "d" is named
+
+    // Edges are directed source→dependent. The lone signal feeds two memos; two
+    // memos feed the exposed memo. (Ids are opaque — assert the shape structurally.)
+    const aNode = signals[0]!;
+    const edgesFromA = g.edges.filter((e) => e.from === aNode.id);
+    expect(edgesFromA.length).toBe(2); // a → b, a → c
+    expect(edgesFromA.every((e) => byId.get(e.to)!.kind === "memo")).toBe(true);
+    const edgesToD = g.edges.filter((e) => e.to === dNode.id);
+    expect(edgesToD.length).toBe(2); // b → d, c → d
+    expect(edgesToD.every((e) => byId.get(e.from)!.kind === "memo")).toBe(true);
+
+    // Structural, NOT retrospective: the topology is present with no action ever
+    // called (this is the whole point vs explain()/history()).
+    expect(bridge.explain()).toBeNull();
+
+    // It's a real read of the standing graph, unchanged by the value moving.
+    setA(10);
+    expect(bridge.graph().nodes.length).toBe(4);
+
+    bridge.dispose();
+  });
+
+  it("is privacy-scoped: an internal, un-exposed node never appears", () => {
+    const [a] = createSignal(1);
+    const exposed = createMemo(() => a() + 1);
+    createMemo(() => a() * 100); // NOT exposed and NOT read by any exposed accessor
+    const bridge = createAgentBridge((r) => r.expose("exposed", () => exposed()));
+
+    const g = bridge.graph();
+    // Only the exposed memo + the signal it derives from — the sibling memo (an
+    // observer of `a`, not a source of the exposed state) is invisible.
+    expect(g.nodes.length).toBe(2);
+    expect(g.nodes.map((n) => n.kind).sort()).toEqual(["memo", "signal"]);
+    expect(g.nodes.find((n) => n.name === "exposed")!.kind).toBe("memo");
+
+    bridge.dispose();
+  });
+
+  it("works through a store: a memo derives from the store field signals it reads", () => {
+    const [s, set] = createStore({ rows: [{ id: "a", status: "open" }, { id: "b", status: "open" }] });
+    const openCount = createMemo(() => s.rows.filter((r) => r.status === "open").length);
+    const bridge = createAgentBridge((r) => {
+      r.expose("openCount", () => openCount());
+      r.action("setStatus", (i, st) => set("rows", i as number, "status", st));
+    });
+
+    const g = bridge.graph();
+    const oc = g.nodes.find((n) => n.name === "openCount")!;
+    expect(oc.kind).toBe("memo");
+    // The memo has sources (the store's per-field signals it read) → inbound edges.
+    expect(g.edges.some((e) => e.to === oc.id)).toBe(true);
+    // Actions are not part of the derives-from graph.
+    expect(g.nodes.some((n) => n.name === "setStatus")).toBe(false);
+
+    set("rows", 0, "status", "done"); // topology unaffected by a value change
+    expect(bridge.graph().nodes.find((n) => n.name === "openCount")).toBeTruthy();
+
+    bridge.dispose();
+  });
+
+  it("assigns stable ids: the same node keeps its id across graph() calls", () => {
+    const [a] = createSignal(1);
+    const total = createMemo(() => a() * 2);
+    const bridge = createAgentBridge((r) => r.expose("total", () => total()));
+
+    const g1 = bridge.graph();
+    const g2 = bridge.graph();
+    const id1 = g1.nodes.find((n) => n.name === "total")!.id;
+    const id2 = g2.nodes.find((n) => n.name === "total")!.id;
+    expect(id2).toBe(id1);
+    // Ids are stable identifiers, distinct per node within the graph.
+    expect(new Set(g1.nodes.map((n) => n.id)).size).toBe(g1.nodes.length);
+
+    bridge.dispose();
+  });
+
+  it("a composite accessor's inputs appear as nodes but back no single name", () => {
+    const [qty] = createSignal(2);
+    const [price] = createSignal(5);
+    const bridge = createAgentBridge((r) => r.expose("total", () => qty() * price()));
+
+    const g = bridge.graph();
+    // Both signals are surfaced; neither carries the name (the derivation lives in
+    // the accessor closure, not in a single reactive node).
+    expect(g.nodes.length).toBe(2);
+    expect(g.nodes.every((n) => n.kind === "signal")).toBe(true);
+    expect(g.nodes.every((n) => n.name === undefined)).toBe(true);
+    expect(g.edges).toEqual([]); // two independent leaf signals
+
+    bridge.dispose();
+  });
+
+  it("introspection leaves NO subscription behind (does not entangle the graph)", () => {
+    const [n, setN] = createSignal(0);
+    const bridge = createAgentBridge((r) => r.expose("n", () => n()));
+    const spy = vi.fn();
+    bridge.subscribe(spy);
+    spy.mockClear();
+
+    bridge.graph(); // the probe reads n() then unsubscribes
+    bridge.graph();
+    bridge.graph();
+    expect(spy).not.toHaveBeenCalled(); // graph() pushes nothing
+
+    // The exposing effect is still the sole observer — one write, exactly one push.
+    setN(1);
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy).toHaveBeenCalledWith({ kind: "state", name: "n", value: 1, initial: false });
+
+    bridge.dispose();
+  });
+});

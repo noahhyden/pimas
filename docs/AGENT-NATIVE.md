@@ -34,8 +34,16 @@ maintains as first-class runtime state: **the live dependency graph** — what i
 readable (signals/memos), what changes it (setters/handlers), how values derive
 (the sources/observers DAG), and *when* they change (the subscription graph).
 
-That opens a cell nobody occupies. Three layers, foundation → wedge:
+That opens a cell nobody occupies. A structural read (L0) beneath three layers,
+foundation → wedge:
 
+- **L0 — graph.** The structural floor: `graph()` returns the dependency
+  *topology* itself — the signal/memo nodes the exposed state derives from and the
+  derives-from edges between them, scoped to the exposed surface. This is the
+  standing graph the engine keeps between updates (`sources`/`observers`), read
+  directly rather than reconstructed from a scrape or inferred from a value diff.
+  L1/L2/L3 all *operate over* this graph; L0 lets an agent (or a dev-tools / graph
+  view) *see its shape* — plan over the structure, not just call actions. (#37)
 - **L1 — subscribe.** The agent subscribes to a specific piece of live UI state
   and is *pushed* the delta on change — no DOM polling, no re-scraping. An
   agent-side `createEffect(() => notify(total()))` already *is* this subscription.

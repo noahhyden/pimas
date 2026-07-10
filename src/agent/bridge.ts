@@ -1,8 +1,11 @@
 /**
  * EXPERIMENTAL — `pimas/agent`, issue #13 (the agent-simulatable frontend).
  * A thin adapter over the public core turning a running UI's reactive graph into
- * an agent-facing surface across three layers:
+ * an agent-facing surface across a structural read plus three layers:
  *
+ *   L0 graph     — graph(): a read-only snapshot of the dependency TOPOLOGY (the
+ *      nodes the exposed state derives from + the derives-from edges), scoped to
+ *      the same exposed surface descriptor() draws. Structure, not values (#37).
  *   L1 subscribe — expose(name, () => value) + subscribe(listener): the agent is
  *      PUSHED a delta the instant a value changes (createEffect IS a subscription).
  *   L2 explain   — call(name, ...) records a causal record (which fields the
@@ -20,6 +23,13 @@
  */
 import { createEffect, createRoot, untrack, batch, speculate as coreSpeculate } from "../reactive/index.js";
 import type { Accessor } from "../reactive/index.js";
+// The topology walk needs the kernel's private `Reactive` node internals, so it
+// lives in the core module and is deep-imported here rather than surfaced on the
+// public `pimas` core export — `bridge.graph()` is the scoped entry point (#37).
+import { introspectGraph } from "../reactive/reactive.js";
+import type { GraphNode, GraphEdge, DependencyGraph } from "../reactive/reactive.js";
+
+export type { GraphNode, GraphEdge, DependencyGraph };
 
 /** A pushed event: a state delta (L1) or a causal record (L2). */
 export type AgentEvent =
@@ -88,6 +98,13 @@ export interface AgentBridge {
   subscribe(listener: (e: AgentEvent) => void): () => void;
   /** A machine-readable description of exposed state + actions (the wire contract). */
   descriptor(): AgentDescriptor;
+  /** L0 structural read (#37): a point-in-time snapshot of the reactive dependency
+   *  TOPOLOGY — the nodes (signals/memos) the exposed state derives from and the
+   *  derives-from edges between them. Unlike `explain()`/`history()` (retrospective,
+   *  action-scoped causality), this is the standing structure, present before any
+   *  action. Privacy-scoped to exactly what `descriptor()` exposes; structure only
+   *  (no values or recompute counts — those stay cheap-by-default opt-ins). */
+  graph(): DependencyGraph;
   /** Agent side: invoke a registered action by name. Unknown name throws. An
    *  async action returns a promise that resolves AFTER its awaited writes land
    *  and L2 provenance is captured; a sync action returns its value directly. */
@@ -214,6 +231,10 @@ export function createAgentBridge(setup: (r: AgentRegistrar) => void, opts: Agen
       }
       return { state, actions: actionsOut };
     },
+    // L0: introspect the topology reachable from the exposed reads. `reads` is the
+    // exact privacy boundary — passing only it scopes the walk to exposed state,
+    // exactly as `descriptor()` iterates only exposed names. Structure-only.
+    graph: () => introspectGraph(reads),
     subscribe(listener) {
       // Replay the current state so a late subscriber isn't blind, then stream.
       for (const [name, value] of latest) listener({ kind: "state", name, value, initial: true });
