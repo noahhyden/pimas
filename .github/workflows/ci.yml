@@ -23,7 +23,7 @@ jobs:
       - run: npm ci
       - run: node scripts/check-package.mjs # supply-chain guard: zero runtime deps
       - run: npm run typecheck
-      - run: npm test
+      - run: npm run coverage # runs the full suite + enforces the coverage gate
       - run: npm run build
 
   # The real-browser suite: things a simulated DOM can't honestly answer (layout,
