@@ -799,3 +799,39 @@ agent (`ActionMeta.params` is `string[]`; fixed sector-engines 9c23706) and a vo
 tree-shakeable (no budget fixture). The metric-grade LLM benchmark (5 auto-graded tasks, in-node tool loop,
 free Gemini + Haiku cross-check, instrumented counting seam) is designed in the frontend `eval/README.md`;
 NOT built (needs a free AI Studio key + ~2 days) — flagged for the owner.
+
+### 54. Agent-native — expose the dependency TOPOLOGY (L0 `graph()`), not just the wire contract (#37)
+`descriptor()` gives names + schemas (the contract), `explain()`/`history()` give the *retrospective, action-scoped*
+causality of the last action, and `subscribe()` streams value deltas — but nothing exposed the *standing structure*:
+the nodes + derives-from edges the kernel already keeps on every node (`sources`/`observers`). So a consumer that
+wants to visualize or plan over structure (the noahhyden.com/pimas graph view; a future dev-tools surface, #21) had
+to hard-code a topology that already exists in the engine. Added `bridge.graph(): { nodes, edges }` — the L0 floor
+beneath L1/L2/L3. Decisions settled (the issue's six open questions):
+- **Scope = exposed-reachable, not the whole graph.** Seed from the exposed accessors (the bridge holds `reads:
+  Map<name, Accessor>`, its exact privacy boundary — same one `descriptor()` draws), run each in a throwaway tracking
+  scope to find the node it reads, then walk `sources` transitively. Never leaks an un-exposed node.
+- **Structure via a real kernel walk, NOT reconstruction from `history()`.** The whole point is the *standing*
+  topology, present before any action; a `writeTap`→`changed` reconstruction would just repackage the retrospective,
+  action-scoped `explain()` and miss intermediate memos and the pre-action structure. This needed one small
+  kernel-level primitive (`introspectGraph` in `reactive.ts`), which the issue anticipated.
+- **Walk `sources` only → signals + memos; effects deferred.** Effects are downstream *observers* of the exposed
+  state, not sources, so a derives-from walk never reaches them — and reaching them (an `observers` walk) would surface
+  the bridge's own exposing effects + DOM render effects (a privacy leak) and hit the `dispose()` source/observer
+  asymmetry. `GraphNode.kind` keeps `"effect"` reserved for a future observers-aware pass; v1 stops at memos (which the
+  issue offers as a valid option, and which fits the demo — a quantitative model of signals=inputs, memos=derived).
+- **Stable ids via a module `WeakMap<Reactive,string>`, lazily assigned.** Not a field on the node — keeps the hot node
+  shape + size budget untouched (D#5), and a node is still GC'd normally (weak keys). Ids stable for a node's lifetime.
+- **Snapshot, not a stream.** Topology is re-collected on every recompute, so `graph()` is a point-in-time pull (like
+  `snapshot()`/`descriptor()`); two calls diff cleanly. A `topology`-changed `subscribe` event is deferred (needs a
+  kernel re-subscription hook; no proven consumer yet).
+- **Committed-only w.r.t. speculation.** The speculation shadow overlays *values* and reuses the real DAG read-only
+  (D#41) — there is no shadow topology to read — so the committed structure is correct under `isSpeculating()`.
+- **Values / recompute counts deferred to a separate opt-in.** `graph()` stays structure-only and cheap; the demo's
+  recompute-count want is a later annotation channel (same tree-shakeable-extra discipline as D#43).
+- **Kept OFF the public `pimas` core.** `introspectGraph` lives in `reactive.ts` and is deep-imported by the bridge but
+  NOT re-exported from `index.ts` — the Stable core surface is unchanged; `bridge.graph()` (🔬) is the documented,
+  scoped entry point. A lower-level public export waits for a 2nd consumer (the N=2 discipline, D#51/#42).
+- **Rejected the `AgentDescriptor.edges` alternative** the issue floated — a standalone `graph()` keeps the wire
+  contract (`descriptor()`) and the structure surface cleanly separated, matching how the surface is already factored.
+Patch-legal (additive to an Experimental entry). +7 vitest (213 total), core size budgets unchanged (topology
+tree-shakes — reachable only through the agent bridge). WebMCP projection of `graph()` deferred (WebMCP parked, D#42/#51).

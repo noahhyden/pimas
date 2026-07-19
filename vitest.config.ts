@@ -28,5 +28,31 @@ export default defineConfig({
     environment: "happy-dom",
     // browser-test/ runs in a REAL browser via Vite + WebBridge, not vitest.
     exclude: ["**/node_modules/**", "**/dist/**", "browser-test/**"],
+    coverage: {
+      provider: "v8",
+      // Instrument the shipped surface only; barrels/type-only files add noise.
+      include: ["src/**/*.ts"],
+      exclude: [
+        // Re-export barrels (flow/store/resource keep real code in index.ts).
+        "src/reactive/index.ts",
+        "src/dom/index.ts",
+        "src/server/index.ts",
+        "src/compiler/index.ts",
+        "src/dom/jsx-types.ts", // types-only, validated by tsc
+        "src/dom/jsx-runtime.ts",
+        "src/dom/jsx-dev-runtime.ts",
+      ],
+      reporter: ["text", "text-summary", "json-summary"],
+      reportsDirectory: "coverage",
+      // Ratchet gate: set just under the current numbers so the suite passes
+      // today but a coverage regression fails CI. Raise these as gaps close;
+      // never lower them to make a red build green.
+      thresholds: {
+        statements: 94,
+        branches: 89,
+        functions: 93,
+        lines: 94,
+      },
+    },
   },
 });

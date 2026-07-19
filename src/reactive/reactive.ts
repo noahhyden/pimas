@@ -409,6 +409,102 @@ export function speculate<T>(apply: () => void, read: () => T): T {
   }
 }
 
+// ── Topology introspection (L0, issue #37) ─────────────────────────────────
+
+/** A node of the dependency graph, projected to a plain read-only shape (never
+ *  the raw `Reactive` — a caller must not be able to mutate `sources`/`observers`
+ *  and corrupt the graph). */
+export interface GraphNode {
+  /** Stable for a node's lifetime (lazily assigned on first introspection). */
+  id: string;
+  /** `signal` = a source with no dependencies; `memo` = a derived value. (The
+   *  `effect` tag is reserved: effects are downstream *observers* of the exposed
+   *  state, not sources, so they never appear in a derives-from walk — see below.) */
+  kind: "signal" | "memo" | "effect";
+  /** The exposed name this node backs, when a seed read touched it alone. */
+  name?: string;
+}
+/** A directed derives-from edge: `from` is a source of `to` (i.e. `to` reads `from`). */
+export interface GraphEdge {
+  from: string;
+  to: string;
+}
+/** A point-in-time snapshot of the dependency topology (structure only). */
+export interface DependencyGraph {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+}
+
+/** Lazily-assigned stable ids. A WeakMap (not a field on the node) keeps the hot
+ *  node shape + size budget untouched (D#5) and lets a node be GC'd normally — an
+ *  id is minted only for the nodes that are actually introspected. */
+const nodeIds = new WeakMap<Reactive, string>();
+let nodeIdSeq = 0;
+function idOf(n: Reactive): string {
+  let id = nodeIds.get(n);
+  if (id === undefined) nodeIds.set(n, (id = "n" + ++nodeIdSeq));
+  return id;
+}
+const kindOf = (n: Reactive): GraphNode["kind"] => (!n.fn ? "signal" : n.effect ? "effect" : "memo");
+
+/**
+ * Read-only structural introspection of the dependency graph (the L0 surface
+ * beneath L1 subscribe / L2 explain / L3 speculate — issue #37). Given named seed
+ * reads, run each in a throwaway tracking scope to discover the node(s) it reads —
+ * leaving NO subscription behind — then walk `sources` transitively to build the
+ * derives-from DAG those seeds depend on.
+ *
+ * The scope is exactly the transitive `sources` closure of the seeds: signals
+ * (roots) and memos (interior). Effects are downstream `observers`, not sources,
+ * of the seeds, so they never appear — the result is "what the exposed state
+ * derives from," matching the privacy boundary a caller has already drawn by
+ * choosing which reads to pass. A seed whose read touches exactly one node names
+ * that node (the idiomatic `expose(name, memo)` / `() => store.field` form); a
+ * composite read's inputs still appear as nodes but back no single name.
+ *
+ * A snapshot: topology is re-collected on every recompute, so this reflects the
+ * committed structure as-of the call. NOT re-exported from the public `pimas`
+ * core (see `index.ts`) — `bridge.graph()` is the documented, scoped entry point.
+ */
+export function introspectGraph(seeds: Iterable<readonly [string, () => unknown]>): DependencyGraph {
+  const nodes = new Map<Reactive, GraphNode>();
+  const edges: GraphEdge[] = [];
+
+  const visit = (n: Reactive): void => {
+    if (nodes.has(n)) return;
+    nodes.set(n, { id: idOf(n), kind: kindOf(n) });
+    for (const s of n.sources) {
+      edges.push({ from: idOf(s), to: idOf(n) });
+      visit(s);
+    }
+  };
+
+  for (const [name, read] of seeds) {
+    // Run the accessor in a throwaway observer to discover the node(s) it reads,
+    // then unsubscribe the probe so introspection leaves the real graph untouched.
+    const probe = makeNode<unknown>(undefined, undefined, false);
+    const prevObserver = currentObserver;
+    const prevOwner = currentOwner;
+    currentObserver = probe;
+    currentOwner = null; // the probe owns nothing and is never flushed
+    try {
+      read();
+    } finally {
+      currentObserver = prevObserver;
+      currentOwner = prevOwner;
+    }
+    const roots = [...probe.sources];
+    removeSources(probe); // leave no trace: drop the probe from every source's observers
+    for (const r of roots) {
+      visit(r);
+      // First name wins (two exposed names may read the same node).
+      if (roots.length === 1 && nodes.get(r)!.name === undefined) nodes.get(r)!.name = name;
+    }
+  }
+
+  return { nodes: [...nodes.values()], edges };
+}
+
 /** Read signals inside `fn` without subscribing the current computation. */
 export function untrack<T>(fn: () => T): T {
   const prev = currentObserver;

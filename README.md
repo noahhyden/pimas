@@ -35,7 +35,7 @@ pure ESM + `"sideEffects": false`). Run `npm run size` for the per-import gzip c
 | `pimas/resource` | 🔬 `createResource` – async fetch as reactive state (`loading`/`error`/`refetch`/`mutate`). **Headless.** | opt-in |
 | `pimas/resume` | 🔬 renderer-free client dispatcher – wires a server tree's serialized handlers to live events **without re-running components**. | 878 B |
 | `pimas/hydrate` | 🔬 `claim()` – **adopts** the server-rendered DOM in place instead of discarding + client-rendering it. | 2412 B |
-| `pimas/agent` | 🔬 expose the reactive graph to an AI agent: subscribe (L1), causal provenance (L2), deterministic what-if `speculate` (L3). **Headless.** | opt-in, tree-shaken when unused |
+| `pimas/agent` | 🔬 expose the reactive graph to an AI agent: dependency topology `graph()` (L0), subscribe (L1), causal provenance (L2), deterministic what-if `speculate` (L3). **Headless.** | opt-in, tree-shaken when unused |
 | `pimas/agent/webmcp` | 🔬 project the bridge onto the WebMCP browser API (`document.modelContext` tools). | – |
 | `pimas/compiler` | 🔬 build-time only – thunk-eraser Vite plugin (`{count()}` → `{() => count()}`). Never in a runtime bundle. | – |
 | `pimas/jsx-runtime`, `pimas/jsx-dev-runtime` | automatic JSX runtime for TS's `react-jsx` transform. | – |
@@ -210,12 +210,21 @@ live listeners **without re-running any component**, and `pimas/hydrate`'s `clai
 adopts by reusing the existing server DOM instead of throwing it away and
 client-rendering from scratch.
 
-### 1.4 The agent surface: subscribe, explain, simulate
+### 1.4 The agent surface: graph, subscribe, explain, simulate
 
 `pimas/agent` is a thin adapter that turns the running graph into an agent-facing
 surface. `createAgentBridge(setup)` gives you `expose(name, () => value)` and
 `action(name, fn)`.
 
+- **L0 – graph.** `graph()` returns a read-only snapshot of the dependency
+  *topology*: the nodes (`{ id, kind: "signal" | "memo", name? }`) the exposed
+  state derives from, and the directed derives-from `edges` between them. It seeds
+  from the same accessors `expose` registered — running each in a throwaway
+  tracking scope to find the node it reads, then walking `sources` transitively —
+  so it's scoped to exactly what `descriptor()` exposes, and it leaves no
+  subscription behind. Unlike `explain()`/`history()` (which are retrospective and
+  action-scoped), this is the *standing* structure — present before any action
+  fires. Structure only; a consumer that wants live values reads `snapshot()`.
 - **L1 – subscribe.** Each `expose` wraps its accessor in a `createEffect` that emits
   a delta on every change. **The exposing effect *is* the subscription** – because
   the accessor runs inside it, it subscribes to exactly the fields it reads
