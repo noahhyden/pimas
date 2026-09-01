@@ -9,10 +9,10 @@ import { createAgentBridge } from "./bridge.js";
 import type { AgentBridge, AgentOptions, AgentRegistrar } from "./bridge.js";
 import { onStoreWrite } from "../store/index.js";
 
-export interface Model<T extends object> extends T {
+export type Model<T extends object> = T & {
   /** The agent/preview surface: snapshot, speculate, call, graph, … */
   bridge: AgentBridge;
-}
+};
 
 const defaultWriteTap: AgentOptions["writeTap"] = (record) =>
   onStoreWrite((e) => record(e.path.map(String).join(".")));

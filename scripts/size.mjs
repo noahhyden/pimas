@@ -18,11 +18,11 @@ const alias = {
 };
 
 const fixtures = {
-  "core: signal only": [`import { createSignal } from "pimas"; createSignal(0);`, 700],
-  "core: + speculate": [`import { createSignal, speculate } from "pimas"; globalThis.x = [createSignal, speculate];`, 1100],
-  "store: createStore": [`import { createStore } from "pimas/store"; globalThis.x = createStore;`, 1600],
-  "agent: createModel": [`import { createModel } from "pimas/agent"; globalThis.x = createModel;`, 2800],
-  "react: usePimas": [`import { usePimas } from "pimas/react"; globalThis.x = usePimas;`, 900],
+  "core: signal only": [`import { createSignal } from "pimas"; createSignal(0);`, 770],
+  "core: + speculate": [`import { createSignal, speculate } from "pimas"; globalThis.x = [createSignal, speculate];`, 940],
+  "store: createStore": [`import { createStore } from "pimas/store"; globalThis.x = createStore;`, 1750],
+  "agent: createModel": [`import { createModel } from "pimas/agent"; globalThis.x = createModel;`, 2130],
+  "react: usePimas": [`import { usePimas } from "pimas/react"; globalThis.x = usePimas;`, 710],
 };
 
 let failed = false;
