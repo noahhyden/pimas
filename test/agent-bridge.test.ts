@@ -7,7 +7,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { createSignal, createMemo } from "pimas";
 import { createStore, onStoreWrite } from "pimas/store";
-import { createAgentBridge, type AgentEvent } from "../src/agent/bridge";
+import { createAgentBridge, type AgentEvent } from "pimas/agent";
 
 describe("agent bridge — L1 subscribe (issue #13)", () => {
   it("pushes an initial snapshot then a delta when exposed state changes", () => {

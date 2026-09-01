@@ -1,5 +1,4 @@
 {
-  "//": "Shared compiler options. tsconfig.json (typecheck) and tsconfig.build.json (emit) both extend this.",
   "compilerOptions": {
     "target": "ESNext",
     "module": "ESNext",
@@ -15,7 +14,6 @@
     "sourceMap": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
-    "jsx": "react-jsx",
-    "jsxImportSource": "pimas"
+    "jsx": "react-jsx"
   }
 }

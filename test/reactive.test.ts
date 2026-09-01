@@ -9,6 +9,7 @@ import {
   untrack,
   onCleanup,
   createRoot,
+  subscribe,
 } from "pimas";
 
 describe("createSignal", () => {
@@ -386,5 +387,19 @@ describe("push-pull guarantees", () => {
     expect(seen).toEqual([0]);
     setA(1);
     expect(seen).toEqual([0, 10]); // the b-effect picked up the cascaded write
+  });
+});
+
+describe("subscribe", () => {
+  it("runs immediately and again on change, then unsubscribes", () => {
+    const [n, setN] = createSignal(1);
+    const seen: number[] = [];
+    const off = subscribe(n, (v) => seen.push(v));
+    expect(seen).toEqual([1]);
+    setN(2);
+    expect(seen).toEqual([1, 2]);
+    off();
+    setN(3);
+    expect(seen).toEqual([1, 2]);
   });
 });

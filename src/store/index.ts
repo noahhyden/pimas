@@ -1,25 +1,7 @@
 /**
- * pimas/store — a nested reactive store (deep reactive proxy).
- *
- * A plain signal holding an object is coarse: replace the object and *everything*
- * that read any field re-runs. A store is fine-grained at the FIELD level — an
- * effect that read `state.rows[3].status` re-runs only when that exact field
- * changes, nothing else. That's what a data-heavy UI (an editable table, a state
- * machine) needs. Built entirely on the public core (signals + batch) — no kernel
- * change, and headless (no DOM), so the Node-side token engine can use it too.
- *
- * How it works: reading a property lazily creates a per-key "ping" signal and
- * subscribes the current computation to it; a per-object keys-signal tracks
- * `length`/enumeration. The RAW object is the one source of truth; the proxy is a
- * read-only reactive view. Writes go through the setter (`setStore(...path,v)`),
- * which mutates the raw object and pings only the signals for the fields that
- * actually changed — inside a `batch`, so dependent effects flush once.
- *
- * v2 (#5): `reconcile` diffs external data in, preserving object identity
- * (matched by key) so a server-refreshed keyed list reuses row proxies and keeps
- * keyed `<For>` stable; `produce` is Immer-style mutable-draft sugar whose writes
- * route through the same fine-grained setter. Both are tree-shakeable tagged
- * updaters — a consumer that imports neither pays for neither. See DECISIONS.
+ * Nested reactive store: a deep proxy that tracks reads per field.
+ * Writes go through the setter so only the fields that actually changed notify.
+ * `produce` is draft sugar; `reconcile` diffs external data in, keeping identity.
  */
 import { createSignal, batch, getListener, speculationScratch } from "../reactive/index.js";
 

@@ -1,25 +1,15 @@
 /**
- * EXPERIMENTAL — `pimas/agent`, issue #13 (the agent-simulatable frontend).
- * A thin adapter over the public core turning a running UI's reactive graph into
- * an agent-facing surface across a structural read plus three layers:
+ * Agent surface over a live reactive graph.
  *
- *   L0 graph     — graph(): a read-only snapshot of the dependency TOPOLOGY (the
- *      nodes the exposed state derives from + the derives-from edges), scoped to
- *      the same exposed surface descriptor() draws. Structure, not values (#37).
- *   L1 subscribe — expose(name, () => value) + subscribe(listener): the agent is
- *      PUSHED a delta the instant a value changes (createEffect IS a subscription).
- *   L2 explain   — call(name, ...) records a causal record (which fields the
- *      action wrote + which exposed values changed); read it via explain().
- *   L3 simulate  — speculate(name, ...) predicts the exposed state AFTER an
- *      action, computed against a shadow of the graph, WITHOUT committing.
- *      speculatePlan(steps) composes several writes in one shadow (a multi-factor
- *      scenario); speculateSweep(name, argsList) runs an independent what-if per
- *      arg-set (a sensitivity sweep) — the planning half of L3. commitPlan(steps)
- *      applies an approved plan FOR REAL as one coalesced action (preview↔commit).
+ *   graph()      topology of the exposed state
+ *   subscribe    push deltas when exposed values change
+ *   call         run an action; explain()/history() say what it wrote
+ *   speculate    predict the exposed state WITHOUT committing
+ *   speculatePlan / speculateSweep / commitPlan
  *
- * Headless (no DOM). Fine-grained: exposing `() => s.rows[3].status` subscribes
- * to exactly that store field. Field-level provenance (L2 `writes`) needs a
- * `writeTap` — wire `pimas/store`'s `onStoreWrite` in (see the option below).
+ * Headless. Fine-grained: exposing `() => s.rows[3].status` subscribes to
+ * exactly that store field. Field-level provenance needs a `writeTap`
+ * (`createModel` wires `onStoreWrite` by default).
  */
 import { createEffect, createRoot, untrack, batch, speculate as coreSpeculate } from "../reactive/index.js";
 import type { Accessor } from "../reactive/index.js";

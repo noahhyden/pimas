@@ -6,14 +6,14 @@
  */
 import { describe, it, expect } from "vitest";
 import { createStore } from "pimas/store";
-import { createAgentBridge } from "../src/agent/bridge";
+import { createAgentBridge } from "pimas/agent";
 import {
   toWebMCP,
   detectModelContext,
   type ModelContext,
   type WebMCPTool,
   type WebMCPRegisterOptions,
-} from "../src/agent/webmcp";
+} from "pimas/agent/webmcp";
 
 function mockHost() {
   const tools = new Map<string, WebMCPTool>();

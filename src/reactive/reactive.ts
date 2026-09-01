@@ -1,27 +1,20 @@
 /**
- * Pimas — reactive core (push-pull, glitch-free).
- * ------------------------------------------------
- * Fine-grained reactivity. Reading a signal subscribes the running computation;
- * writing it re-runs only the computations that depend on it. But propagation is
- * NOT eager — it's a two-phase push-pull, which makes it glitch-free:
+ * Fine-grained reactive core (push-pull, glitch-free).
  *
- *   PUSH (on write): mark dependents without computing anything. Direct
- *     dependents become DIRTY ("a source definitely changed"); everything
- *     transitively below becomes CHECK ("a source *might* have changed").
- *   PULL (on read / effect flush): `updateIfNecessary` walks a CHECK node's
- *     sources first; it recomputes only if a source actually changed value.
+ * Reading a signal subscribes the running computation; writing it re-runs only
+ * the computations that depend on it. Propagation is two-phase:
  *
- * In a diamond (D = B + C, B = C = A+1), writing A recomputes D exactly once,
- * after both B and C are current — no transient wrong value, no double-run. An
- * equality short-circuit (a recompute that yields the same value stops there)
- * kills cascades. Memos are LAZY (compute on read); effects are EAGER (the roots
- * that drive the pull). Algorithm after Milo Hansen's "Reactively".
+ *   PUSH (on write): mark dependents without computing. Direct dependents become
+ *     DIRTY; everything transitively below becomes CHECK.
+ *   PULL (on read / effect flush): a CHECK node walks its sources first and
+ *     recomputes only if a source actually changed.
+ *
+ * Diamonds recompute once. Equal values stop the cascade. Memos are lazy;
+ * effects are eager. Algorithm after Milo Hansen's "Reactively".
+ *
+ * `speculate` evaluates hypothetical writes against a shadow of this graph:
+ * memos recompute, effects do not fire, the real graph is never mutated.
  */
-
-// Type-only (erased at build — no runtime coupling to the DOM layer). Context's
-// Provider is a JSX component, so its return must be the renderer's Child type;
-// `flow` imports it the same way. The reactive core ships zero DOM code.
-import type { Child } from "../dom/engine.js";
 
 // ── Node model ───────────────────────────────────────────────────────────
 
@@ -46,18 +39,8 @@ interface Reactive<T = any> {
   owned: Reactive[];
   cleanups: Array<() => void>;
   equals: (a: T, b: T) => boolean;
-  /** Context values provided at this scope, keyed by context id. Lazily created
-   *  — only `<Provider>` nodes carry one, so plain signals/effects pay nothing. */
-  context?: Record<symbol, unknown>;
-  /** Error handler installed at this scope (a boundary). Walked up the owner
-   *  chain like `context`; lazily created — only boundary nodes carry one. */
+  /** Error handler installed at this scope (a boundary). Walked up the owner chain. */
   errorHandler?: (err: unknown) => void;
-  /** Ambient execution environment (the render backend) captured when this node
-   *  was created, and re-established while its `fn` recomputes. A computation
-   *  that BUILDS nodes (e.g. a `<For>` memo) must recompute against the backend it
-   *  was built under — not whatever is globally current at flush time. Opaque to
-   *  the core; the DOM layer stores its backend here via `getEnv`/`setEnv`. */
-  env?: unknown;
 }
 
 // ── Globals ──────────────────────────────────────────────────────────────
@@ -66,10 +49,6 @@ interface Reactive<T = any> {
 let currentObserver: Reactive | null = null;
 /** The current ownership scope (for disposal of nested computations). */
 let currentOwner: Reactive | null = null;
-/** The current ambient execution environment (the DOM layer's render backend).
- *  Captured onto each node at creation and restored while it recomputes — opaque
- *  to the core (see `Reactive.env`). */
-let currentEnv: unknown = undefined;
 /** While > 0, writes mark + queue effects but don't flush until the outer exit. */
 let batchDepth = 0;
 /** Effects marked dirty/check, awaiting a flush. */
@@ -106,7 +85,6 @@ function makeNode<T>(fn: (() => T) | undefined, value: T | undefined, effect: bo
     sources: new Set(),
     observers: new Set(),
     owner: currentOwner,
-    env: currentEnv,
     owned: [],
     cleanups: [],
     equals: defaultEquals,
@@ -170,10 +148,8 @@ function update<T>(node: Reactive<T>): void {
 
   const prevObserver = currentObserver;
   const prevOwner = currentOwner;
-  const prevEnv = currentEnv;
   currentObserver = node;
   currentOwner = node;
-  currentEnv = node.env; // recompute under the backend this node was created with
   try {
     const next = node.fn!();
     if (!node.equals(node.value as T, next)) {
@@ -186,7 +162,6 @@ function update<T>(node: Reactive<T>): void {
   } finally {
     currentObserver = prevObserver;
     currentOwner = prevOwner;
-    currentEnv = prevEnv;
   }
 }
 
@@ -358,10 +333,9 @@ export function speculationScratch(): Map<unknown, unknown> | null {
  * never mutated and NO effects fire; the whole thing rolls back on exit (drop
  * the shadow map). Returns `read`'s result.
  *
- * Lets an agent ask "what would the UI become if I did X?" and get an EXACT
- * answer computed from the app's own derived logic — before committing anything.
- * Correct for pure derived memos/signals. Store writes throw (they'd mutate
- * committed state; copy-on-write is a later layer). No nesting yet.
+ * Lets you ask "what would derived state become if I did X?" and get an exact
+ * answer from the model's own memos — before committing anything. Correct for
+ * pure memos. Store writes are copy-on-write via `speculationScratch`. No nesting.
  */
 export function speculate<T>(apply: () => void, read: () => T): T {
   if (speculating) throw new Error("speculate: no nested speculation yet");
@@ -521,19 +495,18 @@ export function onCleanup(fn: () => void): void {
   if (currentOwner) currentOwner.cleanups.push(fn);
 }
 
-/** Read the current ambient execution environment (see `Reactive.env`). The DOM
- *  layer stores its render backend here; internal plumbing, not a public API. */
-export function getEnv(): unknown {
-  return currentEnv;
-}
-
-/** Set the current ambient environment, returning the previous one (so callers
- *  can save/restore). Nodes created while it is set capture it and recompute
- *  under it. Internal plumbing for the render backends. */
-export function setEnv(env: unknown): unknown {
-  const prev = currentEnv;
-  currentEnv = env;
-  return prev;
+/**
+ * Subscribe to an accessor. `listener` runs immediately and again whenever
+ * anything `read` touched changes. Returns an unsubscribe that disposes the
+ * underlying effect. The same primitive the React hook and the agent bridge use.
+ */
+export function subscribe<T>(read: Accessor<T>, listener: (value: T) => void): () => void {
+  let dispose!: () => void;
+  createRoot((d) => {
+    dispose = d;
+    createEffect(() => listener(read()));
+  });
+  return dispose;
 }
 
 /**
@@ -585,59 +558,4 @@ export function catchError<T>(tryFn: () => T, handler: (err: unknown) => void): 
   catch (err) { handleError(err, scope); }
   finally { currentOwner = prevOwner; }
   return undefined;
-}
-
-// ── Context ──────────────────────────────────────────────────────────────────
-
-/**
- * A context: a value any descendant can read without prop-drilling. Created by
- * `createContext`; provided by `ctx.Provider`; read by `useContext(ctx)`.
- *
- * Context rides the OWNER tree (#10), not the DOM tree — so it survives portals
- * and (later) serialization. `useContext` walks the owner chain upward to the
- * nearest provider; absent one, it returns the context's default.
- */
-export interface Context<T> {
-  /** Unique key under which this context's value is stored on a provider node. */
-  readonly id: symbol;
-  /** Value `useContext` returns when no provider is found above the reader. */
-  readonly defaultValue: T;
-  /** Component that supplies `value` to everything in its `children` subtree. */
-  Provider: (props: { value: T; children: Child }) => Child;
-}
-
-export function createContext<T>(defaultValue: T): Context<T>;
-export function createContext<T>(): Context<T | undefined>;
-export function createContext<T>(defaultValue?: T): Context<T | undefined> {
-  const id = Symbol("pimas.context");
-  return {
-    id,
-    defaultValue,
-    Provider(props) {
-      // A memo gives us a fresh OWNER scope (like Show/Switch): the value is
-      // stamped on that scope's node, and children are built *inside* it, so
-      // their owner chain runs through here and `useContext` finds the value.
-      // NOTE (pre-compiler): children must be a THUNK — `{() => <App/>}` — or
-      // they'd be evaluated before this scope exists (same rule as <Show>).
-      return createMemo(() => {
-        (currentOwner!.context ??= {})[id] = props.value;
-        return typeof props.children === "function"
-          ? (props.children as () => Child)()
-          : props.children;
-      });
-    },
-  };
-}
-
-/**
- * Read the nearest provided value for `context`, or its default if no
- * `ctx.Provider` sits above the current owner. Call it during a component's
- * setup (synchronously), so `currentOwner` points into the provider's subtree.
- */
-export function useContext<T>(context: Context<T>): T {
-  for (let node = currentOwner; node; node = node.owner) {
-    const ctx = node.context;
-    if (ctx && context.id in ctx) return ctx[context.id] as T;
-  }
-  return context.defaultValue;
 }

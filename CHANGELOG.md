@@ -1,29 +1,29 @@
 # Changelog
 
-All notable changes to pimas are documented here. The format follows
-[Keep a Changelog](https://keepachangelog.com/), and pimas aims to follow
-[Semantic Versioning](https://semver.org/) from 0.1.0 onward. Pre-1.0: minor
-versions may carry breaking changes; the 🔬 experimental surfaces especially.
+Pre-1.0: minor versions may carry breaking changes.
 
-The full design rationale for every decision lives in [`DECISIONS.md`](docs/DECISIONS.md).
+## [0.2.0] — 2026-09-02
 
-## [Unreleased]
-
-Additive, non-breaking over 0.1.2.
+The renderer is gone. pimas is a headless reactive model with exact what-if
+(`speculate`) and a React/agent binding. Sites on the old framework should pin
+`pimas-ui@0.1.2`.
 
 ### Added
-- **Dependency-graph introspection** in `pimas/agent` (🔬) — `bridge.graph()`
-  returns a read-only snapshot of the reactive *topology*: the signal/memo nodes
-  the exposed state derives from (`{ id, kind, name? }`) and the directed
-  derives-from `edges` between them. The L0 structural read beneath L1 subscribe /
-  L2 explain / L3 simulate — the standing structure the kernel already keeps
-  (`sources`/`observers`), scoped to exactly what `descriptor()` exposes, so a
-  graph view / dev-tools surface can introspect the real topology instead of
-  hard-wiring it. Structure only; nodes carry stable ids (a `WeakMap`, so the core
-  node shape and size budgets are unchanged), and the walk tree-shakes away when
-  unused. (#37)
+- `createModel` — one-call factory (store provenance wired by default)
+- `subscribe(read, listener)` on the core
+- `pimas-ui/react` — `usePimas`, `useSnapshot` (React 18+ optional peer)
+- `bridge.graph()` — dependency topology of exposed state
+
+### Removed
+- `pimas-ui/dom`, `/flow`, `/server`, `/resume`, `/hydrate`, `/compiler`,
+  `/resource`, `/jsx-runtime`, `/jsx-dev-runtime`
+- `createContext` / `useContext`
+- The in-browser test suite and Vite browser runner
+
+[0.2.0]: https://github.com/noahhyden/pimas/releases/tag/v0.2.0
 
 ## [0.1.2] — 2026-07-07
+
 
 Additive, non-breaking over 0.1.1.
 

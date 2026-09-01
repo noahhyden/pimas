@@ -1,18 +1,9 @@
 /**
- * produce (#5) — Immer-style mutable-draft sugar over the store's setter.
- *
- * The producer mutates a writable draft with plain assignments / array ops; each
- * write routes through the SAME fine-grained setProperty as `setStore(...path)`,
- * so notification granularity, identity preservation, and guards are identical —
- * this only proves the draft layer maps mutations correctly.
+ * produce — Immer-style mutable-draft sugar over the store's setter.
  */
 import { describe, it, expect, vi } from "vitest";
 import { createRoot, createEffect } from "pimas";
 import { createStore, produce } from "pimas/store";
-import { render } from "pimas/dom";
-import { For } from "pimas/flow";
-
-const texts = (root: Element, sel = "li") => [...root.querySelectorAll(sel)].map((n) => n.textContent);
 
 describe("produce — draft maps to fine-grained writes", () => {
   it("notifies only the mutated field", () => {
@@ -26,7 +17,7 @@ describe("produce — draft maps to fine-grained writes", () => {
     set(produce((d) => { d.a = 10; }));
     expect(s.a).toBe(10);
     expect(aSpy).toHaveBeenCalledTimes(2);
-    expect(bSpy).toHaveBeenCalledTimes(1); // sibling untouched
+    expect(bSpy).toHaveBeenCalledTimes(1);
   });
 
   it("dedups a write to an Object.is-equal value (no notification)", () => {
@@ -48,7 +39,7 @@ describe("produce — draft maps to fine-grained writes", () => {
       createEffect(() => { s.user.age; ageSpy(); });
     });
     set(produce((d) => { d.user.name = "Grace"; }));
-    expect(s.user).toBe(u); // same proxy — mutated in place
+    expect(s.user).toBe(u);
     expect(s.user.name).toBe("Grace");
     expect(nameSpy).toHaveBeenCalledTimes(2);
     expect(ageSpy).toHaveBeenCalledTimes(1);
@@ -96,7 +87,7 @@ describe("produce — draft maps to fine-grained writes", () => {
     createRoot(() => createEffect(() => { s.a; s.b; spy(); }));
     expect(spy).toHaveBeenCalledTimes(1);
     set(produce((d) => { d.a = 2; d.b = 2; }));
-    expect(spy).toHaveBeenCalledTimes(2); // one re-run, not two
+    expect(spy).toHaveBeenCalledTimes(2);
   });
 
   it("ignores __proto__ writes (no pollution, no throw)", () => {
@@ -110,42 +101,11 @@ describe("produce — draft maps to fine-grained writes", () => {
     const [, set] = createStore<{ n: number }>({ n: 1 });
     expect(() => set("n" as never, produce(() => {}) as never)).toThrow(/not an object/);
   });
-});
 
-describe("produce — speculation + <For>", () => {
-  it("does not touch the real store from a produce inside speculate (implicitly commit-safe)", () => {
-    // A committed produce is the baseline; ensure a plain committed produce works
-    // after establishing state (guards against the draft leaking raw writes).
+  it("sequential produces see prior writes", () => {
     const [s, set] = createStore({ count: 1 });
     set(produce((d) => { d.count = d.count + 1; }));
     set(produce((d) => { d.count = d.count + 1; }));
-    expect(s.count).toBe(3); // reads inside the draft saw the prior write
-  });
-
-  it("a produce editing one row reuses DOM rows, rebuilds nothing", () => {
-    const [s, set] = createStore({ rows: [{ id: "a", v: "1" }, { id: "b", v: "2" }] });
-    let builds = 0;
-    const root = document.createElement("div");
-    render(
-      () => (
-        <ul>
-          <For each={() => s.rows}>
-            {(row) => {
-              builds++;
-              return <li>{() => row.v}</li>;
-            }}
-          </For>
-        </ul>
-      ),
-      root,
-    );
-    expect(builds).toBe(2);
-    const liA = root.querySelectorAll("li")[0]!;
-
-    set("rows", produce((rows) => { rows[0]!.v = "9"; }));
-
-    expect(builds).toBe(2); // no rebuild
-    expect(texts(root)).toEqual(["9", "2"]);
-    expect(root.querySelectorAll("li")[0]).toBe(liA); // same DOM node
+    expect(s.count).toBe(3);
   });
 });
