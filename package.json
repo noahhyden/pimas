@@ -29,6 +29,10 @@
       "types": "./dist/agent/webmcp.d.ts",
       "import": "./dist/agent/webmcp.js"
     },
+    "./agent/page": {
+      "types": "./dist/agent/page.d.ts",
+      "import": "./dist/agent/page.js"
+    },
     "./react": {
       "types": "./dist/react/index.d.ts",
       "import": "./dist/react/index.js"

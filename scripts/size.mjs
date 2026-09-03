@@ -14,6 +14,7 @@ const alias = {
   "pimas/store": src("store/index.ts"),
   "pimas/agent": src("agent/index.ts"),
   "pimas/agent/webmcp": src("agent/webmcp.ts"),
+  "pimas/agent/page": src("agent/page.ts"),
   "pimas/react": src("react/index.ts"),
 };
 
@@ -22,6 +23,7 @@ const fixtures = {
   "core: + speculate": [`import { createSignal, speculate } from "pimas"; globalThis.x = [createSignal, speculate];`, 940],
   "store: createStore": [`import { createStore } from "pimas/store"; globalThis.x = createStore;`, 1750],
   "agent: createModel": [`import { createModel } from "pimas/agent"; globalThis.x = createModel;`, 2130],
+  "agent: page": [`import { installPageAgent } from "pimas/agent/page"; globalThis.x = installPageAgent;`, 1550],
   "react: usePimas": [`import { usePimas } from "pimas/react"; globalThis.x = usePimas;`, 710],
 };
 

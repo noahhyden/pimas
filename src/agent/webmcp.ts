@@ -26,7 +26,8 @@
  *   - return: the MCP content envelope `{ content: [{ type: "text", text }] }`,
  *     which reference hosts/agents expect (the platform itself accepts `any`).
  */
-import type { AgentBridge, AgentDescriptor } from "./bridge.js";
+import type { AgentBridge } from "./bridge.js";
+import { toolsForDescriptor } from "./webmcp-tools.js";
 
 /** A single WebMCP tool descriptor (matches the spec's `ModelContextTool`). */
 export interface WebMCPTool {
@@ -78,16 +79,6 @@ export function detectModelContext(): ModelContext | null {
   return mc && typeof mc.registerTool === "function" ? mc : null;
 }
 
-/** Shape a bridge return value into the MCP content envelope reference agents expect. */
-function envelope(value: unknown): { content: Array<{ type: "text"; text: string }> } {
-  // MCP content text MUST be a string. `JSON.stringify(undefined)` is `undefined`
-  // (not a string) — a void action (e.g. a setter that returns nothing) would
-  // otherwise emit `text: undefined`, which a reference agent's JSON.parse rejects.
-  // Coalesce nullish to JSON `null`.
-  const text = typeof value === "string" ? value : JSON.stringify(value ?? null);
-  return { content: [{ type: "text", text }] };
-}
-
 /**
  * Register `bridge`'s actions + state as WebMCP tools on the host (auto-detected
  * or `opts.provider`). Returns a teardown that unregisters everything (via an
@@ -101,139 +92,11 @@ export function toWebMCP(bridge: AgentBridge, opts: WebMCPOptions = {}): () => v
       "toWebMCP: no WebMCP host found (document/navigator.modelContext). Pass opts.provider, or run where WebMCP is available.",
     );
   }
-  const prefix = opts.namespace ? `${opts.namespace}.` : "";
-  const desc = bridge.descriptor();
   const controller = new AbortController();
   if (opts.signal) opts.signal.addEventListener("abort", () => controller.abort(), { once: true });
   const regOpts: WebMCPRegisterOptions = { signal: controller.signal, exposedTo: opts.exposedTo };
-
-  // An action's WebMCP input schema: explicit `input`, else one built from named
-  // `params`, else a free-form positional `args` array.
-  const schemaFor = (a: AgentDescriptor["actions"][string]): object =>
-    a.input ??
-    (a.params
-      ? { type: "object", properties: Object.fromEntries(a.params.map((p) => [p, {}])), required: a.params }
-      : { type: "object", properties: { args: { type: "array", description: "positional arguments" } } });
-
-  // Map a named-args (or free-form) input bag back to the action's positional
-  // signature, per its `params`.
-  const argvFor = (a: AgentDescriptor["actions"][string], input: unknown): unknown[] => {
-    const bag = (input ?? {}) as Record<string, unknown>;
-    return a.params ? a.params.map((p) => bag[p]) : Array.isArray(bag.args) ? (bag.args as unknown[]) : [];
-  };
-
-  // Actions → tools. A named-args object (per `params`, else free-form) is mapped
-  // back to the action's positional signature before calling the bridge.
-  for (const [name, a] of Object.entries(desc.actions)) {
-    const inputSchema = schemaFor(a);
-    host.registerTool(
-      {
-        name: `${prefix}${name}`,
-        description: a.description ?? name,
-        inputSchema,
-        annotations: a.readOnly ? { readOnlyHint: true } : undefined,
-        execute: async (input) => envelope(await bridge.call(name, ...argvFor(a, input))),
-      },
-      regOpts,
-    );
-  }
-
-  // Exposed state → read-only `get_<name>` tools (WebMCP has no resources). Each
-  // is a LIVE read, so it reflects current state on every call.
-  if (opts.readTools !== false) {
-    for (const [name, s] of Object.entries(desc.state)) {
-      host.registerTool(
-        {
-          name: `${prefix}get_${name}`,
-          description: s.description ?? `Read the current value of "${name}".`,
-          inputSchema: { type: "object", properties: {} },
-          annotations: { readOnlyHint: true },
-          execute: async () => envelope(bridge.snapshot().state[name]),
-        },
-        regOpts,
-      );
-    }
-  }
-
-  // L3 → `simulate_*` tools. speculate/speculatePlan/speculateSweep predict the
-  // exposed after-state against a SHADOW graph and COMMIT NOTHING — the wedge no
-  // scrape-and-poke agent has (it would have to mutate the real UI and re-read).
-  // All are readOnly. Set `simulateTools:false` for a poke-only baseline.
-  if (opts.simulateTools !== false) {
-    // Per mutating action: predict the state after applying it once.
-    for (const [name, a] of Object.entries(desc.actions)) {
-      if (a.readOnly) continue; // a read action has nothing to speculate
-      host.registerTool(
-        {
-          name: `${prefix}simulate_${name}`,
-          description: `Predict the state after ${name}(...) WITHOUT committing (L3 what-if).${a.description ? " " + a.description : ""}`,
-          inputSchema: schemaFor(a),
-          annotations: { readOnlyHint: true },
-          execute: async (input) => envelope(bridge.speculate(name, ...argvFor(a, input))),
-        },
-        regOpts,
-      );
-    }
-    // Multi-factor scenario: predict after applying several actions in one shadow.
-    host.registerTool(
-      {
-        name: `${prefix}simulate_plan`,
-        description:
-          "Predict the state after applying several actions in order in ONE shadow (a multi-factor what-if). Commits nothing.",
-        inputSchema: {
-          type: "object",
-          properties: {
-            steps: {
-              type: "array",
-              description: "Ordered steps applied in the shadow.",
-              items: {
-                type: "object",
-                properties: {
-                  action: { type: "string", description: "action name" },
-                  args: { type: "array", description: "positional arguments" },
-                },
-                required: ["action"],
-              },
-            },
-          },
-          required: ["steps"],
-        },
-        annotations: { readOnlyHint: true },
-        execute: async (input) => {
-          const raw = ((input ?? {}) as { steps?: Array<{ action: string; args?: unknown[] }> }).steps ?? [];
-          const steps = raw.map((s) => [s.action, ...(s.args ?? [])] as [string, ...unknown[]]);
-          return envelope(bridge.speculatePlan(steps));
-        },
-      },
-      regOpts,
-    );
-    // Sensitivity sweep: one independent what-if per arg-set for a single action.
-    host.registerTool(
-      {
-        name: `${prefix}simulate_sweep`,
-        description:
-          "Run one independent what-if of an action per arg-set (a sensitivity sweep). Returns the predicted state at each point. Commits nothing.",
-        inputSchema: {
-          type: "object",
-          properties: {
-            action: { type: "string", description: "action name to sweep" },
-            argsList: {
-              type: "array",
-              description: "list of positional-argument arrays, one per sweep point",
-              items: { type: "array" },
-            },
-          },
-          required: ["action", "argsList"],
-        },
-        annotations: { readOnlyHint: true },
-        execute: async (input) => {
-          const bag = (input ?? {}) as { action?: string; argsList?: unknown[][] };
-          return envelope(bridge.speculateSweep(bag.action as string, bag.argsList ?? []));
-        },
-      },
-      regOpts,
-    );
-  }
+  const tools = toolsForDescriptor(bridge, bridge.descriptor(), opts);
+  for (const tool of tools.values()) host.registerTool(tool, regOpts);
 
   return () => controller.abort();
 }

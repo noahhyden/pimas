@@ -8,6 +8,7 @@
       "pimas/store": ["./src/store/index.ts"],
       "pimas/agent": ["./src/agent/index.ts"],
       "pimas/agent/webmcp": ["./src/agent/webmcp.ts"],
+      "pimas/agent/page": ["./src/agent/page.ts"],
       "pimas/react": ["./src/react/index.ts"]
     }
   },

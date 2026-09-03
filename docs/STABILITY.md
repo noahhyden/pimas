@@ -10,6 +10,7 @@ Within 0.2.x, the exports below are additive. Breaking changes bump `0.x.0`.
 | `pimas-ui/store` | `createStore`, `reconcile`, `produce`, `onStoreWrite` |
 | `pimas-ui/agent` | `createModel`, `createAgentBridge` |
 | `pimas-ui/agent/webmcp` | `toWebMCP` |
+| `pimas-ui/agent/page` | `installPageAgent`, `connectRemoteBridge`, `handleBridgeRequest` |
 | `pimas-ui/react` | `usePimas`, `useSnapshot` |
 
 `0.1.x` renderer entries (`pimas-ui/dom`, `/flow`, `/server`, `/resume`, `/hydrate`, `/compiler`, `/resource`, `/jsx-runtime`) are gone.

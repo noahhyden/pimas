@@ -2,7 +2,7 @@
 
 Pre-1.0: minor versions may carry breaking changes.
 
-## [0.2.0] — 2026-09-02
+## [0.2.0] — 2026-09-03
 
 The renderer is gone. pimas is a headless reactive model with exact what-if
 (`speculate`) and a React/agent binding. Sites on the old framework should pin
@@ -13,6 +13,8 @@ The renderer is gone. pimas is a headless reactive model with exact what-if
 - `subscribe(read, listener)` on the core
 - `pimas-ui/react` — `usePimas`, `useSnapshot` (React 18+ optional peer)
 - `bridge.graph()` — dependency topology of exposed state
+- `pimas-ui/agent/page` — `installPageAgent`, `connectRemoteBridge`,
+  `handleBridgeRequest`. Sets `window.__pimas` with or without WebMCP.
 
 ### Removed
 - `pimas-ui/dom`, `/flow`, `/server`, `/resume`, `/hydrate`, `/compiler`,

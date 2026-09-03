@@ -6,6 +6,7 @@ const src = (p: string) => resolve(process.cwd(), "src", p);
 export default defineConfig({
   resolve: {
     alias: [
+      { find: "pimas/agent/page", replacement: src("agent/page.ts") },
       { find: "pimas/agent/webmcp", replacement: src("agent/webmcp.ts") },
       { find: "pimas/agent", replacement: src("agent/index.ts") },
       { find: "pimas/store", replacement: src("store/index.ts") },

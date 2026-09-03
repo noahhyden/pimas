@@ -81,6 +81,17 @@ Memos must be pure. If a memo writes to the network, speculation will not save y
 | `pimas-ui/store` | `createStore`, `produce`, `reconcile` |
 | `pimas-ui/agent` | `createModel`, `createAgentBridge` — `snapshot`, `subscribe`, `call`, `explain`, `speculate`, `speculatePlan`, `speculateSweep`, `commitPlan`, `graph` |
 | `pimas-ui/agent/webmcp` | `toWebMCP(bridge)` — actions + `simulate_*` tools |
+| `pimas-ui/agent/page` | `installPageAgent`, `connectRemoteBridge`, `handleBridgeRequest` — `window.__pimas` without WebMCP |
 | `pimas-ui/react` | `usePimas(read)`, `useSnapshot(bridge)` — React 18+, optional peer |
 
 Zero runtime dependencies. React is an optional peer, pulled in only if you import `pimas-ui/react`.
+
+A page agent works with or without `document.modelContext`. Host `handleBridgeRequest` on one POST; the browser installs the same surface:
+
+```ts
+import { connectRemoteBridge, installPageAgent } from "pimas-ui/agent/page";
+
+void installPageAgent(connectRemoteBridge({ url: "/api/pimas" }), { namespace: "model" });
+// window.__pimas.model.speculate(action, ...args)  — live state unchanged
+// window.__pimas.model.call(action, ...args)       — commit
+```
