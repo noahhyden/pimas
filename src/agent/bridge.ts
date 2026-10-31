@@ -133,7 +133,6 @@ export function createAgentBridge(setup: (r: AgentRegistrar) => void, opts: Agen
   const stateMeta = new Map<string, StateMeta>();
   const actions = new Map<string, (...args: unknown[]) => unknown>();
   const actionMeta = new Map<string, ActionMeta>();
-  let lastCause: CauseRecord | null = null;
   const causeLog: CauseRecord[] = [];
   const historyLimit = opts.historyLimit ?? 50;
   let dispose!: () => void;
@@ -198,6 +197,24 @@ export function createAgentBridge(setup: (r: AgentRegistrar) => void, opts: Agen
     return out;
   };
 
+  /** Capture field writes and changed exposed values around an action. */
+  const withProvenance = (action: string, args: unknown[]): { record(): void; abort(): void } => {
+    const writes: string[] = [];
+    const stopTap = opts.writeTap?.((label) => writes.push(label));
+    const before = new Map(latest);
+    return {
+      abort: () => stopTap?.(),
+      record() {
+        stopTap?.();
+        const changed = [...latest.keys()].filter((k) => !Object.is(before.get(k), latest.get(k)));
+        const cause = { action, args, writes, changed };
+        causeLog.push(cause);
+        if (causeLog.length > historyLimit) causeLog.shift();
+        emit({ kind: "cause", ...cause });
+      },
+    };
+  };
+
   return {
     snapshot: () => ({
       state: Object.fromEntries(latest),
@@ -233,49 +250,31 @@ export function createAgentBridge(setup: (r: AgentRegistrar) => void, opts: Agen
     },
     call(name, ...args) {
       const fn = requireAction(name);
-      // L2: capture the field writes (if a tap is wired) and the exposed values
-      // that change, so the agent can be told WHY the state moved.
-      const writes: string[] = [];
-      const stopTap = opts.writeTap?.((label) => writes.push(label));
-      const before = new Map(latest); // exposing effects update `latest` during fn()
-      // Record provenance once the action's effects have all landed. For an
-      // ASYNC action this must run AFTER the promise settles — otherwise the
-      // awaited writes (which happen past the first await) are missed (#13).
-      const settle = (): void => {
-        stopTap?.();
-        const changed = [...latest.keys()].filter((k) => !Object.is(before.get(k), latest.get(k)));
-        lastCause = { action: name, args, writes, changed };
-        // Bounded change log (oldest→newest): the recent sequence, not just last.
-        causeLog.push(lastCause);
-        if (causeLog.length > historyLimit) causeLog.shift();
-        emit({ kind: "cause", action: name, args, writes, changed });
-      };
-
+      const prov = withProvenance(name, args);
       let result: unknown;
       try {
         result = untrack(() => fn(...args));
       } catch (e) {
-        stopTap?.(); // no provenance on a synchronous throw (as before)
+        prov.abort();
         throw e;
       }
       // Async action: defer provenance until its awaited writes have committed.
-      // `call` returns a promise resolving to the action's value, post-capture.
       if (result != null && typeof (result as { then?: unknown }).then === "function") {
         return (result as Promise<unknown>).then(
           (v) => {
-            settle();
+            prov.record();
             return v;
           },
           (e) => {
-            stopTap?.(); // rejected → no provenance, just unsubscribe
+            prov.abort();
             throw e;
           },
         );
       }
-      settle();
+      prov.record();
       return result;
     },
-    explain: () => lastCause,
+    explain: () => causeLog.at(-1) ?? null,
     history: (limit) => (limit == null ? causeLog.slice() : causeLog.slice(-limit)),
     speculate(actionName, ...args) {
       const fn = requireAction(actionName);
@@ -298,27 +297,16 @@ export function createAgentBridge(setup: (r: AgentRegistrar) => void, opts: Agen
       return argsList.map((args) => coreSpeculate(() => void fn(...args), readAllExposed));
     },
     commitPlan(steps) {
-      // The commit mirror of speculatePlan: apply all steps FOR REAL in one batch
-      // (writes coalesce to a single flush) and record ONE coalesced L2 record —
-      // provenance for "applied scenario X", not N fragmented per-step records.
-      // Sync-pure, like speculatePlan. Reuses call()'s provenance machinery once.
-      const writes: string[] = [];
-      const stopTap = opts.writeTap?.((label) => writes.push(label));
-      const before = new Map(latest); // exposing effects update `latest` on flush
+      const prov = withProvenance("plan", steps);
       try {
         batch(() => {
           for (const [name, ...args] of steps) requireAction(name)(...args);
         });
       } catch (e) {
-        stopTap?.(); // partial writes may have landed; no coalesced record on throw
+        prov.abort();
         throw e;
       }
-      stopTap?.();
-      const changed = [...latest.keys()].filter((k) => !Object.is(before.get(k), latest.get(k)));
-      lastCause = { action: "plan", args: steps, writes, changed };
-      causeLog.push(lastCause);
-      if (causeLog.length > historyLimit) causeLog.shift();
-      emit({ kind: "cause", action: "plan", args: steps, writes, changed });
+      prov.record();
       return Object.fromEntries(latest);
     },
     dispose,
