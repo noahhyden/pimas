@@ -2,6 +2,41 @@
 
 Pre-1.0: minor versions may carry breaking changes.
 
+## [0.3.0] — 2026-10-31
+
+An audit release. Nothing was added. Every cut below had one caller, one
+implementation, or no caller at all.
+
+### Removed (breaking)
+- `connectRemoteBridge` / `handleBridgeRequest` and the `BridgeRequest` wire
+  types from `pimas-ui/agent/page` — a hand-rolled JSON-RPC transport for an
+  in-process bridge. POST to your own endpoint and call the bridge method there.
+- `useSnapshot` from `pimas-ui/react` — a coarse hook whose own doc comment said
+  to prefer `usePimas`. Use `usePimas` per field.
+- `bridge.speculateSweep()` — it was `argsList.map(a => bridge.speculate(n, ...a))`.
+  The `simulate_sweep` WebMCP tool is unchanged and still does exactly that.
+- `readTools` / `simulateTools` on `toWebMCP` — flags nothing ever set. Read and
+  simulate tools are always registered. `namespace` stays.
+- Exported types with no referent: `Owner`, `WebMCPBridgeSurface`,
+  `WebMCPRegisterOptions`.
+
+### Changed
+- `installPageAgent(bridge, opts)` is **synchronous** and returns the `PageAgent`
+  directly — it only ever took an in-process bridge. Drop the `await`.
+- `AgentDescriptor` is typed `StateMeta & { value }` / `ActionMeta` instead of
+  re-declaring those fields. Absent metadata keys are now absent rather than
+  present-and-`undefined`.
+- One `npm run lint` replaces `lint:comments` + `lint:rules`; the two guard
+  scripts merged, losing the YAML block-scalar parser the repo never needed.
+- Tests import source directly; the `pimas/*` test alias map is gone, so the
+  subpath map lives in `package.json` only.
+
+### Internal
+- The per-node `equals` override was unreachable from any public API; nodes
+  compare with `Object.is` and carry one less field.
+
+[0.3.0]: https://github.com/noahhyden/pimas/releases/tag/v0.3.0
+
 ## [0.2.0] — 2026-09-03
 
 The renderer is gone. pimas is a headless reactive model with exact what-if

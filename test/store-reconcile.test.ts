@@ -1,7 +1,7 @@
 /** reconcile — diff external data into a store preserving row identity. */
 import { describe, it, expect, vi } from "vitest";
-import { createRoot, createEffect } from "pimas";
-import { createStore, reconcile, onStoreWrite } from "pimas/store";
+import { createRoot, createEffect } from "../src/reactive/index.js";
+import { createStore, reconcile, onStoreWrite } from "../src/store/index.js";
 
 describe("reconcile — store contract", () => {
   it("updates only the changed field of a matched row, keeping proxy identity", () => {

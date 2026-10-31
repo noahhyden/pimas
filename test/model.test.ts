@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { createMemo } from "pimas";
-import { createStore } from "pimas/store";
-import { createModel } from "pimas/agent";
+import { createMemo } from "../src/reactive/index.js";
+import { createStore } from "../src/store/index.js";
+import { createModel } from "../src/agent/index.js";
 
 describe("createModel", () => {
   function cart() {

@@ -3,17 +3,16 @@ import { build } from "esbuild";
 import { gzipSync } from "node:zlib";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
-import { esbuildAliases as alias } from "./aliases.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 const fixtures = {
-  "core: signal only": [`import { createSignal } from "pimas"; createSignal(0);`, 770],
-  "core: + speculate": [`import { createSignal, speculate } from "pimas"; globalThis.x = [createSignal, speculate];`, 940],
-  "store: createStore": [`import { createStore } from "pimas/store"; globalThis.x = createStore;`, 1750],
-  "agent: createModel": [`import { createModel } from "pimas/agent"; globalThis.x = createModel;`, 2130],
-  "agent: page": [`import { installPageAgent } from "pimas/agent/page"; globalThis.x = installPageAgent;`, 1550],
-  "react: usePimas": [`import { usePimas } from "pimas/react"; globalThis.x = usePimas;`, 710],
+  "core: signal only": [`import { createSignal } from "./src/reactive/index.js"; createSignal(0);`, 770],
+  "core: + speculate": [`import { createSignal, speculate } from "./src/reactive/index.js"; globalThis.x = [createSignal, speculate];`, 940],
+  "store: createStore": [`import { createStore } from "./src/store/index.js"; globalThis.x = createStore;`, 1750],
+  "agent: createModel": [`import { createModel } from "./src/agent/index.js"; globalThis.x = createModel;`, 2130],
+  "agent: page": [`import { installPageAgent } from "./src/agent/page.js"; globalThis.x = installPageAgent;`, 1550],
+  "react: usePimas": [`import { usePimas } from "./src/react/index.js"; globalThis.x = usePimas;`, 710],
 };
 
 let failed = false;
@@ -26,7 +25,6 @@ for (const [name, [code, budget]] of Object.entries(fixtures)) {
     format: "esm",
     write: false,
     treeShaking: true,
-    alias,
     logLevel: "silent",
     external: ["react"],
   });

@@ -11,9 +11,9 @@ standalone comments is **one line**. Everything longer — the rationale, the me
 the history, the "why not X" — belongs in an `AGENTS.d/` rule, which is where an agent
 will actually find it.
 
-`npm run lint:comments` enforces it at zero — there is no baseline, so a new violation is red
-on the PR that adds it. `npm run lint:rules` enforces that a rule itself stays one line of
-255 characters. Both run in CI, and both refuse to pass when nothing matched.
+`npm run lint` enforces it at zero — there is no baseline, so a new violation is red on the
+PR that adds it. The same guard caps a rule itself at one line of 255 characters. It runs in
+CI and refuses to pass when nothing matched.
 
 ## Rules
 

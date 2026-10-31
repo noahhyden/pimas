@@ -1,6 +1,6 @@
 {
   "name": "pimas-ui",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Exact what-if over a live reactive model. Drop it into React; an agent can simulate against the same graph without committing.",
   "type": "module",
   "license": "MIT",
@@ -50,8 +50,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "build": "tsc -p tsconfig.build.json",
     "size": "node scripts/size.mjs",
-    "lint:comments": "node scripts/check-one-line-comments.mjs",
-    "lint:rules": "node scripts/check-agents-rule-length.mjs",
+    "lint": "node scripts/check-comments.mjs",
     "prepack": "tsc -p tsconfig.build.json"
   },
   "keywords": [

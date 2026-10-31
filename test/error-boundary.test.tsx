@@ -6,7 +6,7 @@ import {
   catchError,
   onCleanup,
   createRoot,
-} from "pimas";
+} from "../src/reactive/index.js";
 
 describe("catchError (reactive core)", () => {
   it("(1) catches a synchronous throw in tryFn and returns undefined", () => {
