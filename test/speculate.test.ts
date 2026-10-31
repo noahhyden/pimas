@@ -4,7 +4,7 @@
  * real graph is never mutated, no effects fire, and it rolls back on exit.
  */
 import { describe, it, expect, vi } from "vitest";
-import { createSignal, createMemo, createEffect, createRoot, speculate, isSpeculating } from "pimas";
+import { createSignal, createMemo, createEffect, createRoot, speculate } from "pimas";
 import { createStore } from "pimas/store";
 
 describe("speculate — L3 what-if oracle (issue #13)", () => {
@@ -21,7 +21,6 @@ describe("speculate — L3 what-if oracle (issue #13)", () => {
     // Real graph untouched.
     expect(qty()).toBe(2);
     expect(total()).toBe(10);
-    expect(isSpeculating()).toBe(false);
   });
 
   it("is glitch-free across a diamond (each memo computes once, correctly)", () => {

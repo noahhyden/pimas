@@ -311,11 +311,6 @@ export function getListener(): unknown {
   return currentObserver;
 }
 
-/** True while a `speculate(...)` what-if evaluation is in progress (L3, #13). */
-export function isSpeculating(): boolean {
-  return speculating !== null;
-}
-
 /**
  * The current speculation's rollback-scoped scratchpad, or null when not
  * speculating. Lets a userland primitive (e.g. `pimas/store`) shadow its own
@@ -391,10 +386,8 @@ export function speculate<T>(apply: () => void, read: () => T): T {
 export interface GraphNode {
   /** Stable for a node's lifetime (lazily assigned on first introspection). */
   id: string;
-  /** `signal` = a source with no dependencies; `memo` = a derived value. (The
-   *  `effect` tag is reserved: effects are downstream *observers* of the exposed
-   *  state, not sources, so they never appear in a derives-from walk — see below.) */
-  kind: "signal" | "memo" | "effect";
+  /** `signal` = a source with no dependencies; `memo` = a derived value. */
+  kind: "signal" | "memo";
   /** The exposed name this node backs, when a seed read touched it alone. */
   name?: string;
 }
@@ -419,7 +412,7 @@ function idOf(n: Reactive): string {
   if (id === undefined) nodeIds.set(n, (id = "n" + ++nodeIdSeq));
   return id;
 }
-const kindOf = (n: Reactive): GraphNode["kind"] => (!n.fn ? "signal" : n.effect ? "effect" : "memo");
+const kindOf = (n: Reactive): GraphNode["kind"] => (n.fn ? "memo" : "signal");
 
 /**
  * Read-only structural introspection of the dependency graph (the L0 surface
