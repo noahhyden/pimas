@@ -50,6 +50,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "build": "tsc -p tsconfig.build.json",
     "size": "node scripts/size.mjs",
+    "lint:comments": "node scripts/check-one-line-comments.mjs",
+    "lint:rules": "node scripts/check-agents-rule-length.mjs",
     "prepack": "tsc -p tsconfig.build.json"
   },
   "keywords": [

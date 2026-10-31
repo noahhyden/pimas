@@ -1,5 +1,4 @@
-// Single source of truth for subpath -> source aliases (vitest + size.mjs).
-// Ordered most-specific first: vitest matches in order, so bare "pimas" is last.
+// Single source of truth for subpath -> source aliases, most-specific first (vitest matches in order).
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 
