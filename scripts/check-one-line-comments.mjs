@@ -1,11 +1,10 @@
-/** Explanation in code is capped at ONE line; the rest belongs in AGENTS.d — design, the ratchet, and each exemption's rationale live in AGENTS.d/010-explanation-in-code-is-capped-at-one-line.md, not here. */
-import { readFileSync, writeFileSync, existsSync, statSync } from "node:fs";
+/** Explanation in code is capped at ONE line; the rest belongs in AGENTS.d — the design and each exemption's rationale live in AGENTS.d/010-explanation-in-code-is-capped-at-one-line.md, not here. */
+import { readFileSync, existsSync, statSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve, relative } from "node:path";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const BASELINE = resolve(ROOT, ".github", "one-line-comment-baseline.json");
 
 const CODE_EXT = [".ts", ".tsx", ".mjs"];
 const YAML_EXT = [".yml", ".yaml"];
@@ -137,20 +136,15 @@ function scan(paths) {
   return found;
 }
 
-/** Every path whose count exceeds its baselined allowance. */
-function regressions(counts, baseline, found) {
+/** Every violation, as printable lines. */
+function report(found) {
   const out = [];
-  for (const [path, n] of [...counts].sort()) {
-    const allowed = baseline[path] ?? 0;
-    if (n > allowed) {
-      out.push(`  ${path}: ${n} > ${allowed} allowed`);
-      for (const [line, why] of found.get(path).slice(0, 4)) out.push(`      ${path}:${line}  ${why}`);
-    }
+  for (const [path, hits] of [...found].sort()) {
+    for (const [line, why] of hits) out.push(`  ${path}:${line}  ${why}`);
   }
   return out;
 }
 
-const write = process.argv.includes("--write-baseline");
 const files = process.argv.slice(2).filter((a) => !a.startsWith("--"));
 const paths = files.length ? files.map((f) => relative(ROOT, resolve(f))) : tracked();
 
@@ -160,29 +154,9 @@ if (!paths.length) {
 }
 
 const found = scan(paths);
-const counts = new Map([...found].map(([p, v]) => [p, v.length]));
-const codeCounts = new Map([...counts].filter(([p]) => isCode(p)));
-const yamlCounts = new Map([...counts].filter(([p]) => isYaml(p)));
-
-if (write) {
-  const obj = Object.fromEntries([...codeCounts].sort());
-  writeFileSync(BASELINE, JSON.stringify({ files: obj }, null, 2) + "\n");
-  const total = [...codeCounts.values()].reduce((a, b) => a + b, 0);
-  console.log(`one-line-comments: baseline written — ${codeCounts.size} file(s) / ${total} violation(s).`);
-  process.exit(0);
-}
-
-if (!existsSync(BASELINE)) {
-  console.error(`one-line-comments: missing baseline at ${relative(ROOT, BASELINE)}. Generate it once with --write-baseline`);
-  process.exit(2);
-}
-
-const baseline = JSON.parse(readFileSync(BASELINE, "utf8")).files ?? {};
-// YAML has no baseline: there are two workflow files, so the purge landed with the guard.
-const bad = regressions(codeCounts, baseline, found).concat(regressions(yamlCounts, {}, found));
-
 const codeScanned = paths.filter(isCode).length;
 const yamlScanned = paths.filter(isYaml).length;
+const bad = report(found);
 
 if (bad.length) {
   console.error("one-line-comments: explanation in code is capped at ONE line.\n");
@@ -190,17 +164,9 @@ if (bad.length) {
   console.error(
     "\nA module, class or function gets a one-line doc comment or none, and a run of standalone\n" +
       "comments is one line. Move the rest into an AGENTS.d/ rule. A run carrying a real tooling\n" +
-      `pragma (@ts-expect-error, eslint-disable, …) is exempt.\n\nScanned ${codeScanned} code file(s), ${yamlScanned} yaml file(s). Baseline: ${relative(ROOT, BASELINE)}`,
+      `pragma (@ts-expect-error, eslint-disable, …) is exempt.\n\nScanned ${codeScanned} code file(s), ${yamlScanned} yaml file(s).`,
   );
   process.exit(1);
 }
 
-const codeTotal = [...codeCounts.values()].reduce((a, b) => a + b, 0);
-const baseTotal = Object.values(baseline).reduce((a, b) => a + b, 0);
-console.log(
-  `one-line-comments: OK — ${codeScanned} code file(s) scanned, ${codeTotal} baselined violation(s) remaining ` +
-    `(baseline ${baseTotal}); ${yamlScanned} yaml file(s) scanned, no baseline, ${[...yamlCounts.values()].reduce((a, b) => a + b, 0)} violation(s).`,
-);
-if (codeTotal < baseTotal) {
-  console.log("  A count went DOWN. Refresh the baseline so it cannot creep back: npm run lint:comments -- --write-baseline");
-}
+console.log(`one-line-comments: OK — ${codeScanned} code file(s) and ${yamlScanned} yaml file(s) scanned, 0 violations.`);
