@@ -1,9 +1,4 @@
-/**
- * WebMCP projection (issue #13): a bridge's actions become WebMCP tools and its
- * exposed state becomes read-only `get_<name>` tools, tested against a mock host
- * that matches the spec — `registerTool(tool, { signal })`, teardown via abort,
- * `execute` returning the MCP content envelope.
- */
+/** WebMCP projection tested against a mock host matching the spec. */
 import { describe, it, expect } from "vitest";
 import { createStore } from "pimas/store";
 import { createAgentBridge } from "pimas/agent";

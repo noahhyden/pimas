@@ -46,10 +46,7 @@ function jsonValue(value: unknown): unknown {
   return JSON.parse(JSON.stringify(value ?? null)) as unknown;
 }
 
-/**
- * Dispatch one JSON bridge request. A host only needs to parse a POST body,
- * call this function, and serialize the returned promise's value.
- */
+/** Dispatch one JSON bridge request; a host parses the POST body, calls this, and serializes the result. */
 export async function handleBridgeRequest(bridge: AgentBridge, body: BridgeRequest): Promise<unknown> {
   let result: unknown;
   switch (body.op) {
@@ -110,16 +107,12 @@ export function connectRemoteBridge(opts: RemoteBridgeOptions): RemoteBridge {
   };
 }
 
-/**
- * Install a browser-agent-friendly global whether WebMCP exists or not.
- * Remote bridges are supported, so installation awaits their descriptor once.
- */
+/** Install the browser-agent global whether or not WebMCP exists; a remote bridge awaits its descriptor once. */
 export async function installPageAgent(
   bridge: WebMCPBridgeSurface,
   opts: PageAgentOptions = {},
 ): Promise<PageAgent> {
-  // Publish the stable object synchronously, before a remote descriptor request
-  // settles. Callers may await this function when they need the populated tools.
+  // Publish synchronously, before the remote descriptor settles; await the call for populated tools.
   const tools = new Map<string, WebMCPTool>();
   const pageAgent: PageAgent = {
     bridge,
