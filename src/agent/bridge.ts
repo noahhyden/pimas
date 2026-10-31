@@ -1,32 +1,18 @@
-/**
- * Agent surface over a live reactive graph.
- *
- *   graph()      topology of the exposed state
- *   subscribe    push deltas when exposed values change
- *   call         run an action; explain()/history() say what it wrote
- *   speculate    predict the exposed state WITHOUT committing
- *   speculatePlan / speculateSweep / commitPlan
- *
- * Headless. Fine-grained: exposing `() => s.rows[3].status` subscribes to
- * exactly that store field. Field-level provenance needs a `writeTap`
- * (`createModel` wires `onStoreWrite` by default).
- */
+/** Agent surface over a live reactive graph: snapshot, subscribe, call, explain, speculate. */
 import { createEffect, createRoot, untrack, batch, speculate as coreSpeculate } from "../reactive/index.js";
 import type { Accessor } from "../reactive/index.js";
-// The topology walk needs the kernel's private `Reactive` node internals, so it
-// lives in the core module and is deep-imported here rather than surfaced on the
-// public `pimas` core export — `bridge.graph()` is the scoped entry point (#37).
+// Deep import, not the public export — see AGENTS.d/313-introspectgraph-is-deep-imported-from-the-kernel-and-reads-is-the-privacy-boundary.md
 import { introspectGraph } from "../reactive/reactive.js";
 import type { GraphNode, GraphEdge, DependencyGraph } from "../reactive/reactive.js";
 
 export type { GraphNode, GraphEdge, DependencyGraph };
 
-/** A pushed event: a state delta (L1) or a causal record (L2). */
+/** A pushed event: a state delta or a causal record. */
 export type AgentEvent =
   | { kind: "state"; name: string; value: unknown; initial: boolean }
   | { kind: "cause"; action: string; args: unknown[]; writes: string[]; changed: string[] };
 
-/** L2: why the last action changed what it changed. */
+/** Why an action changed what it changed. */
 export interface CauseRecord {
   action: string;
   args: unknown[];
@@ -47,8 +33,7 @@ export interface StateMeta {
 export interface ActionMeta {
   /** JSON Schema for the arguments (object form). If omitted, `params` builds one. */
   input?: object;
-  /** Positional parameter names, in order — lets a named-arg caller map to the
-   *  action's positional signature (e.g. `["id", "status"]`). */
+  /** Positional parameter names in order, so a named-arg caller can map onto the action signature. */
   params?: string[];
   description?: string;
   /** Hint that the action doesn't mutate persistent state (WebMCP readOnlyHint). */
@@ -70,14 +55,9 @@ export interface AgentRegistrar {
 }
 
 export interface AgentOptions {
-  /**
-   * Optional source of field-level write labels for L2. Given a `record`
-   * callback, subscribe to writes and forward each write's label; return an
-   * unsubscribe. Wire `pimas/store`:
-   *   writeTap: (record) => onStoreWrite((e) => record(e.path.join(".")))
-   */
+  /** Source of field-level write labels: forward each write's label to `record`, return an unsubscribe. */
   writeTap?: (record: (label: string) => void) => () => void;
-  /** How many recent causal records `history()` retains (L2 change log). Default 50. */
+  /** How many recent causal records `history()` retains. Default 50. */
   historyLimit?: number;
 }
 
@@ -88,44 +68,27 @@ export interface AgentBridge {
   subscribe(listener: (e: AgentEvent) => void): () => void;
   /** A machine-readable description of exposed state + actions (the wire contract). */
   descriptor(): AgentDescriptor;
-  /** L0 structural read (#37): a point-in-time snapshot of the reactive dependency
-   *  TOPOLOGY — the nodes (signals/memos) the exposed state derives from and the
-   *  derives-from edges between them. Unlike `explain()`/`history()` (retrospective,
-   *  action-scoped causality), this is the standing structure, present before any
-   *  action. Privacy-scoped to exactly what `descriptor()` exposes; structure only
-   *  (no values or recompute counts — those stay cheap-by-default opt-ins). */
+  /** Standing dependency topology (nodes and derives-from edges) of exposed state only; structure, no values. */
   graph(): DependencyGraph;
-  /** Agent side: invoke a registered action by name. Unknown name throws. An
-   *  async action returns a promise that resolves AFTER its awaited writes land
-   *  and L2 provenance is captured; a sync action returns its value directly. */
+  /** Invoke an action by name (unknown name throws); an async action resolves after its writes land and provenance is captured. */
   call(name: string, ...args: unknown[]): unknown;
-  /** L2: the causal record of the most recent action (or null before any call). */
+  /** Causal record of the most recent action, or null before any call. */
   explain(): CauseRecord | null;
-  /** L2 change log: recent causal records, oldest→newest (bounded by
-   *  `historyLimit`). `limit` returns only the last N. Empty before any call. */
+  /** Recent causal records, oldest to newest, bounded by `historyLimit`; `limit` keeps the last N. */
   history(limit?: number): CauseRecord[];
-  /** L3: predict the exposed state after `actionName(...args)` WITHOUT committing. */
+  /** Predict the exposed state after `actionName(...args)` without committing. */
   speculate(actionName: string, ...args: unknown[]): Record<string, unknown>;
-  /** L3 multi-factor scenario: predict the exposed state after applying ALL `steps`
-   *  in order against ONE shadow graph. Not reducible to separate `speculate` calls
-   *  — those each reset the shadow, this composes the writes. Nothing commits. */
+  /** Predict the exposed state after applying all `steps` in order against one shadow graph; nothing commits. */
   speculatePlan(steps: Array<[string, ...unknown[]]>): Record<string, unknown>;
-  /** L3 sensitivity sweep: run one INDEPENDENT speculation of `actionName` per
-   *  arg-set, returning the predicted exposed state at each point. Nothing commits. */
+  /** One independent speculation of `actionName` per arg-set; nothing commits. */
   speculateSweep(actionName: string, argsList: unknown[][]): Record<string, unknown>[];
-  /** L3 commit: apply an approved plan (previewed by `speculatePlan`) for REAL —
-   *  all steps in ONE batch, yielding ONE coalesced L2 record (`action:"plan"`),
-   *  not N fragmented per-step records. Returns the committed exposed state. The
-   *  preview↔commit mirror of `speculatePlan`. */
+  /** Apply a plan for real in one batch with one coalesced `action:"plan"` record; returns the committed state. */
   commitPlan(steps: Array<[string, ...unknown[]]>): Record<string, unknown>;
   /** Tear down every exposed subscription (disposes the root owner). */
   dispose(): void;
 }
 
-/**
- * Build a bridge. `setup` runs inside a fresh reactive root so every `expose`
- * effect is owned and disposable; register state/actions there.
- */
+/** Build a bridge; `setup` runs inside a fresh reactive root so every `expose` effect is disposable. */
 export function createAgentBridge(setup: (r: AgentRegistrar) => void, opts: AgentOptions = {}): AgentBridge {
   const listeners = new Set<(e: AgentEvent) => void>();
   const latest = new Map<string, unknown>();
@@ -138,16 +101,10 @@ export function createAgentBridge(setup: (r: AgentRegistrar) => void, opts: Agen
   let dispose!: () => void;
 
   const emit = (e: AgentEvent): void => {
-    // untrack so a listener that happens to read a signal never subscribes the
-    // exposing effect to it — the agent observes, it must not entangle the graph.
+    // see AGENTS.d/311-the-bridge-emit-must-be-untracked-or-an-agent-listener-entangles-the-host-graph.md
     untrack(() => {
       for (const l of listeners) {
-        // Isolate each listener: `emit` runs INSIDE the exposing effect (see
-        // `expose`), so a throwing agent-side listener would otherwise propagate
-        // into the host's reactive flush — breaking sibling listeners and the
-        // exposing effect itself. Re-throw on a microtask so the error still
-        // surfaces (global onerror / unhandledRejection) without entangling or
-        // corrupting the synchronous host update.
+        // see AGENTS.d/310-the-bridge-emit-runs-inside-the-exposing-effect-so-isolate-each-listener-and-rethrow-on-a-microtask.md
         try {
           l(e);
         } catch (err) {
@@ -163,8 +120,7 @@ export function createAgentBridge(setup: (r: AgentRegistrar) => void, opts: Agen
     expose(name, read, meta) {
       reads.set(name, read);
       if (meta) stateMeta.set(name, meta);
-      // The effect runs once now (seeds `latest`) and re-runs on every change to
-      // whatever `read` touched — that re-run IS the push. No core change.
+      // The effect's first run seeds `latest`; each re-run is the push.
       createEffect(() => {
         const value = read();
         const initial = !latest.has(name);
@@ -189,8 +145,7 @@ export function createAgentBridge(setup: (r: AgentRegistrar) => void, opts: Agen
     return fn;
   };
 
-  /** Read every exposed value once — the L3 "predicted after-state" projection.
-   *  Called inside a `speculate` read phase, so these reads hit the shadow graph. */
+  /** Read every exposed value once; inside a `speculate` read phase these hit the shadow graph. */
   const readAllExposed = (): Record<string, unknown> => {
     const out: Record<string, unknown> = {};
     for (const [name, read] of reads) out[name] = read();
@@ -238,12 +193,9 @@ export function createAgentBridge(setup: (r: AgentRegistrar) => void, opts: Agen
       }
       return { state, actions: actionsOut };
     },
-    // L0: introspect the topology reachable from the exposed reads. `reads` is the
-    // exact privacy boundary — passing only it scopes the walk to exposed state,
-    // exactly as `descriptor()` iterates only exposed names. Structure-only.
+    // `reads` is the privacy boundary — see AGENTS.d/313-introspectgraph-is-deep-imported-from-the-kernel-and-reads-is-the-privacy-boundary.md
     graph: () => introspectGraph(reads),
     subscribe(listener) {
-      // Replay the current state so a late subscriber isn't blind, then stream.
       for (const [name, value] of latest) listener({ kind: "state", name, value, initial: true });
       listeners.add(listener);
       return () => listeners.delete(listener);
@@ -258,7 +210,7 @@ export function createAgentBridge(setup: (r: AgentRegistrar) => void, opts: Agen
         prov.abort();
         throw e;
       }
-      // Async action: defer provenance until its awaited writes have committed.
+      // see AGENTS.d/312-an-async-action-records-provenance-only-after-its-promise-settles-and-records-nothing-on-throw-or-reject.md
       if (result != null && typeof (result as { then?: unknown }).then === "function") {
         return (result as Promise<unknown>).then(
           (v) => {
@@ -278,21 +230,16 @@ export function createAgentBridge(setup: (r: AgentRegistrar) => void, opts: Agen
     history: (limit) => (limit == null ? causeLog.slice() : causeLog.slice(-limit)),
     speculate(actionName, ...args) {
       const fn = requireAction(actionName);
-      // Apply the action + read every exposed value against a SHADOW of the graph
-      // (L3). Nothing commits: the real store/signals are untouched on return.
       return coreSpeculate(() => void fn(...args), readAllExposed);
     },
     speculatePlan(steps) {
-      // One shadow graph, all steps applied in order — the writes COMPOSE (a
-      // multi-factor scenario). Same-field writes are last-write-wins, mirroring
-      // reality. Nothing commits.
+      // One shadow graph: writes compose, same-field writes are last-write-wins.
       return coreSpeculate(() => {
         for (const [name, ...args] of steps) requireAction(name)(...args);
       }, readAllExposed);
     },
     speculateSweep(actionName, argsList) {
-      // One INDEPENDENT top-level speculation per arg-set — a sensitivity sweep.
-      // Each is a fresh shadow (so it never nests), and none commits.
+      // Each arg-set gets a fresh top-level shadow so speculations never nest.
       const fn = requireAction(actionName);
       return argsList.map((args) => coreSpeculate(() => void fn(...args), readAllExposed));
     },

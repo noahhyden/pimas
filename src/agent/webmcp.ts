@@ -1,31 +1,4 @@
-/**
- * EXPERIMENTAL — `pimas/agent/webmcp`, issue #13.
- * Projects an agent bridge onto the WebMCP browser API (W3C WebML CG draft;
- * Chrome origin trial). WebMCP is TOOLS-ONLY — no resources, no push channel —
- * so the projection is:
- *
- *   - each bridge ACTION  → a WebMCP tool (execute → bridge.call)
- *   - each exposed VALUE  → a read-only `get_<name>` tool (a live read, since
- *                           WebMCP has no resource/subscribe concept)
- *   - each ACTION also    → a read-only `simulate_<name>` tool (execute →
- *                           bridge.speculate: predicts the after-state against a
- *                           shadow graph and COMMITS NOTHING), plus one
- *                           `simulate_plan` (multi-factor scenario) and
- *                           `simulate_sweep` (sensitivity sweep). This is the L3
- *                           wedge — the what-if a scrape-and-poke agent cannot do
- *                           without mutating the real UI and re-reading it.
- *   - the bridge's own subscribe → kept as the LIVE PUSH channel WebMCP lacks;
- *                           that is the differentiator, not projected.
- *
- * The spec is a moving origin-trial target, so the volatile bits are isolated
- * here (per the WebMCP maintainers' own guidance):
- *   - entry point: `document.modelContext` (current) with a `navigator.modelContext`
- *     fallback (the deprecated Chrome-149 location).
- *   - registration: `registerTool(tool, { signal })` → `Promise<undefined>`; there is
- *     no handle, so teardown is an `AbortController` (abort → unregister).
- *   - return: the MCP content envelope `{ content: [{ type: "text", text }] }`,
- *     which reference hosts/agents expect (the platform itself accepts `any`).
- */
+/** EXPERIMENTAL WebMCP projection of an agent bridge: actions, get_ reads and simulate_ tools; the push channel is not projected. */
 import type { AgentBridge } from "./bridge.js";
 import { toolsForDescriptor } from "./webmcp-tools.js";
 
@@ -53,13 +26,11 @@ export interface ModelContext {
 export interface WebMCPOptions {
   /** Provide the WebMCP host explicitly; otherwise auto-detect the browser global. */
   provider?: ModelContext;
-  /** Prefix tool names (e.g. an island slug) so multiple bridges don't collide. */
+  /** Prefix tool names so multiple bridges don't collide. */
   namespace?: string;
   /** Also register a `get_<name>` read tool per exposed value. Default true. */
   readTools?: boolean;
-  /** Also register the L3 `simulate_<name>` + `simulate_plan`/`simulate_sweep`
-   *  tools (speculate/plan/sweep — predict without committing). Default true.
-   *  Set false for a poke-and-rescrape baseline (the A/B eval switch). */
+  /** Also register `simulate_<name>`, `simulate_plan` and `simulate_sweep` (predict without committing). Default true. */
   simulateTools?: boolean;
   /** Abort this to tear down all registrations (else use the returned disposer). */
   signal?: AbortSignal;
@@ -75,12 +46,7 @@ export function detectModelContext(): ModelContext | null {
   return mc && typeof mc.registerTool === "function" ? mc : null;
 }
 
-/**
- * Register `bridge`'s actions + state as WebMCP tools on the host (auto-detected
- * or `opts.provider`). Returns a teardown that unregisters everything (via an
- * AbortController — the spec's canonical lifecycle). Throws if no host is found
- * and none was provided.
- */
+/** Register `bridge` as WebMCP tools; returns a teardown (see AGENTS.d/314-webmcp-teardown-is-an-abortcontroller-because-registertool-returns-no-handle.md), throws if no host is found. */
 export function toWebMCP(bridge: AgentBridge, opts: WebMCPOptions = {}): () => void {
   const host = opts.provider ?? detectModelContext();
   if (!host) {

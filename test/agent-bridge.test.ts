@@ -1,9 +1,4 @@
-/**
- * SPIKE test — issue #13, L1. Proves an agent can subscribe to live reactive
- * state and be pushed deltas on change, and call actions, entirely through the
- * public core (no kernel change). Fine-grained: a change to one exposed field
- * pushes a delta for exactly that name.
- */
+/** Agent bridge: subscribe pushes deltas for exactly the changed name, call runs actions, via the public core. */
 import { describe, it, expect, vi } from "vitest";
 import { createSignal, createMemo } from "pimas";
 import { createStore, onStoreWrite } from "pimas/store";
@@ -336,9 +331,7 @@ describe("agent bridge — L1 subscribe (issue #13)", () => {
   });
 
   it("isolates a throwing listener: siblings still receive, host graph stays intact", () => {
-    // emit() runs INSIDE the exposing effect, so an unguarded listener throw
-    // would break sibling listeners AND the host's reactive flush. The throw is
-    // re-raised on a microtask so it still surfaces without entangling the graph.
+    // see AGENTS.d/310-the-bridge-emit-runs-inside-the-exposing-effect-so-isolate-each-listener-and-rethrow-on-a-microtask.md
     const microtaskErrors: unknown[] = [];
     const spy = vi.spyOn(globalThis, "queueMicrotask").mockImplementation((cb) => {
       try {
@@ -353,9 +346,7 @@ describe("agent bridge — L1 subscribe (issue #13)", () => {
       const bridge = createAgentBridge((r) => r.expose("n", () => n()));
 
       const boom = new Error("listener blew up");
-      // throw only on the delta (not the initial replay, which runs on the
-      // agent's own subscribe() stack — the fix targets emit(), which fires
-      // inside the host's exposing effect)
+      // throw only on the delta; the initial replay runs on the agent's own stack.
       const bad = vi.fn((e: AgentEvent) => {
         if (e.kind === "state" && !e.initial) throw boom;
       });
@@ -366,8 +357,7 @@ describe("agent bridge — L1 subscribe (issue #13)", () => {
       good.mockClear();
       microtaskErrors.length = 0;
 
-      // A bad listener throwing must not prevent `good` from being delivered,
-      // and must not throw out of the host signal write.
+      // A throwing listener must not block `good` or throw out of the host write.
       expect(() => setN(1)).not.toThrow();
       expect(bad).toHaveBeenCalledTimes(1);
       expect(good).toHaveBeenCalledTimes(1);
@@ -422,8 +412,7 @@ describe("agent bridge — L0 graph / topology introspection (issue #37)", () =>
     expect(dNode.kind).toBe("memo");
     expect(g.nodes.filter((n) => n.name !== undefined).length).toBe(1); // only "d" is named
 
-    // Edges are directed source→dependent. The lone signal feeds two memos; two
-    // memos feed the exposed memo. (Ids are opaque — assert the shape structurally.)
+    // Edges run source to dependent; ids are opaque so assert the shape.
     const aNode = signals[0]!;
     const edgesFromA = g.edges.filter((e) => e.from === aNode.id);
     expect(edgesFromA.length).toBe(2); // a → b, a → c
@@ -432,8 +421,7 @@ describe("agent bridge — L0 graph / topology introspection (issue #37)", () =>
     expect(edgesToD.length).toBe(2); // b → d, c → d
     expect(edgesToD.every((e) => byId.get(e.from)!.kind === "memo")).toBe(true);
 
-    // Structural, NOT retrospective: the topology is present with no action ever
-    // called (this is the whole point vs explain()/history()).
+    // Structural, not retrospective: present before any action.
     expect(bridge.explain()).toBeNull();
 
     // It's a real read of the standing graph, unchanged by the value moving.
@@ -450,8 +438,7 @@ describe("agent bridge — L0 graph / topology introspection (issue #37)", () =>
     const bridge = createAgentBridge((r) => r.expose("exposed", () => exposed()));
 
     const g = bridge.graph();
-    // Only the exposed memo + the signal it derives from — the sibling memo (an
-    // observer of `a`, not a source of the exposed state) is invisible.
+    // The sibling memo observes `a` but is not a source of exposed state, so it is invisible.
     expect(g.nodes.length).toBe(2);
     expect(g.nodes.map((n) => n.kind).sort()).toEqual(["memo", "signal"]);
     expect(g.nodes.find((n) => n.name === "exposed")!.kind).toBe("memo");
@@ -503,8 +490,7 @@ describe("agent bridge — L0 graph / topology introspection (issue #37)", () =>
     const bridge = createAgentBridge((r) => r.expose("total", () => qty() * price()));
 
     const g = bridge.graph();
-    // Both signals are surfaced; neither carries the name (the derivation lives in
-    // the accessor closure, not in a single reactive node).
+    // Neither signal carries the name; the derivation lives in the accessor closure.
     expect(g.nodes.length).toBe(2);
     expect(g.nodes.every((n) => n.kind === "signal")).toBe(true);
     expect(g.nodes.every((n) => n.name === undefined)).toBe(true);
