@@ -1,21 +1,13 @@
-/**
- * Nested reactive store: a deep proxy that tracks reads per field.
- * Writes go through the setter so only the fields that actually changed notify.
- * `produce` is draft sugar; `reconcile` diffs external data in, keeping identity.
- */
+/** Nested reactive store: a deep proxy tracking reads per field, with `produce` and `reconcile` updaters. */
 import { createSignal, batch, getListener, speculationScratch } from "../reactive/index.js";
 
 const $RAW = Symbol("pimas.store.raw");
 const $NODES = Symbol("pimas.store.nodes");
-// Tags an in-place updater (reconcile/produce): the setter runs its `apply`
-// closure instead of replacing the target reference. ONE tag for both keeps the
-// setter's always-shipped cost to a single lookup; each `apply` carries its own
-// heavy logic (diff walkers / draft traps) so they tree-shake for non-users.
+// Tags an in-place updater (reconcile/produce): the setter runs its `apply` instead of replacing the target.
 const $UPDATER = Symbol("pimas.store.updater");
 // Sentinel `key` meaning "the parent object itself" — a root-level updater.
 const ROOT = Symbol("pimas.store.root");
-// One extra tracking signal per object, pinged when its key set / array length
-// changes — so `Object.keys`, `in`, iteration, and `.length` are reactive.
+// Per-object signal pinged when its key set / array length changes (keys, `in`, iteration, `.length`).
 const $KEYS = Symbol("pimas.store.keys");
 
 /** Per-object registry: key → its ping signal (a monotonic counter). */
@@ -28,18 +20,13 @@ export interface StoreWriteEvent {
 }
 const writeListeners = new Set<(e: StoreWriteEvent) => void>();
 
-/**
- * Subscribe to committed store writes — the write PATH. Feeds L2 causal
- * provenance ("`total` changed because a write hit `rows.3.status`"). Only REAL
- * writes fire; speculation (#13) is silent. Returns an unsubscribe.
- */
+/** Subscribe to committed store write paths (speculative writes are silent); returns an unsubscribe. */
 export function onStoreWrite(fn: (e: StoreWriteEvent) => void): () => void {
   writeListeners.add(fn);
   return () => writeListeners.delete(fn);
 }
 
-// Stable proxy per raw object: reading the same nested object twice returns the
-// SAME proxy, so identity-keyed reconciliation (<For>) keeps reusing rows.
+// Stable proxy per raw object: reading a nested object twice returns the SAME proxy.
 const proxyCache = new WeakMap<object, unknown>();
 
 function isWrappable(v: unknown): v is Record<PropertyKey, unknown> {
@@ -62,18 +49,11 @@ function getNodes(target: object): Nodes {
 }
 
 function signalFor(nodes: Nodes, key: PropertyKey) {
-  // Store signals outlive any reader's owner: createSignal never registers on the
-  // owner tree (only memos/effects do), so these are held solely by `nodes` and
-  // live as long as the store. The value is a ping counter; reading it subscribes.
+  // See AGENTS.d/220-store-signals-outlive-their-readers-owner.md
   return nodes[key] || (nodes[key] = createSignal(0));
 }
 
-/**
- * Subscribe the current computation to `key`'s ping signal — but ONLY if there
- * is one. A read outside any effect/memo (e.g. an assertion, or SSR where the
- * whole tree renders once) creates no signal, so a large store never allocates
- * per-cell nodes for cells nobody observes.
- */
+/** Subscribe the current computation to `key`'s ping signal, only if one is listening — see AGENTS.d/210-a-store-read-outside-a-reactive-scope-creates-no-signal.md */
 function track(target: object, key: PropertyKey): void {
   if (getListener()) signalFor(getNodes(target), key)[0]();
 }
@@ -94,13 +74,9 @@ const traps: ProxyHandler<Record<PropertyKey, unknown>> = {
       return target.length;
     }
     const value = target[key];
-    // Methods (array iteration/map/etc.): return as-is. Called with `this` = the
-    // proxy, so their internal length/index reads still go through these traps.
-    if (typeof value === "function") return value;
+    if (typeof value === "function") return value; // array methods run with `this` = proxy, re-entering these traps
     track(target, key);
-    // L3 copy-on-write (#13): during speculation, a hypothetical edit lives in
-    // the rollback-scoped scratch, never in the raw object — return it here so
-    // derived memos recompute against the what-if without committing anything.
+    // Speculation shadow wins over raw — see AGENTS.d/230-a-write-during-speculate-goes-to-the-scratch-never-the-raw-object.md
     const scratch = speculationScratch();
     if (scratch) {
       const shadow = scratch.get(target) as Map<PropertyKey, unknown> | undefined;
@@ -144,10 +120,9 @@ function wrap<T extends object>(value: T): T {
 
 /** Set one field on a raw object and ping exactly the signals that changed. */
 function setProperty(state: Record<PropertyKey, unknown>, key: PropertyKey, value: unknown): void {
-  if (key === "__proto__") return; // prototype-pollution guard
+  if (key === "__proto__") return; // prototype-pollution guard — see AGENTS.d/260-setproperty-must-refuse-the-proto-key.md
   const next = unwrap(value);
-  // L3 copy-on-write (#13): a write while speculating goes to the rollback-scoped
-  // scratch, NOT the raw object — the real store is never mutated by a what-if.
+  // Speculative write: scratch only — see AGENTS.d/230-a-write-during-speculate-goes-to-the-scratch-never-the-raw-object.md
   const scratch = speculationScratch();
   if (scratch) {
     let shadow = scratch.get(state) as Map<PropertyKey, unknown> | undefined;
@@ -174,9 +149,7 @@ function setProperty(state: Record<PropertyKey, unknown>, key: PropertyKey, valu
 /** Applies an in-place update to `parent[key]` (or `parent` itself for ROOT). */
 type StoreUpdater = (parent: Record<PropertyKey, unknown>, key: PropertyKey | typeof ROOT) => void;
 
-/** The updater tag on a value, if any. `produce` returns a tagged FUNCTION (so
- *  its draft type infers from the setter's updater slot); `reconcile` a tagged
- *  object — so check both. */
+/** The updater tag on a value, if any; `produce` tags a function and `reconcile` an object, so check both. */
 function updaterTag(v: unknown): StoreUpdater | undefined {
   return v && (typeof v === "object" || typeof v === "function")
     ? (v as { [$UPDATER]?: StoreUpdater })[$UPDATER]
@@ -188,12 +161,7 @@ function updaterTarget(parent: Record<PropertyKey, unknown>, key: PropertyKey | 
   return key === ROOT ? parent : parent[key];
 }
 
-/**
- * Read a raw field, honoring the speculation scratch (mirrors the get trap) so
- * a reconcile that runs during `speculate` diffs against the what-if, not the
- * committed raw. Returns RAW values (scratch stores unwrapped), so the walkers
- * can recurse into raw children and reuse their cached proxies.
- */
+/** Read a raw field through the speculation scratch (no tracking), returning RAW unwrapped values. */
 function readField(target: Record<PropertyKey, unknown>, key: PropertyKey): unknown {
   const scratch = speculationScratch();
   if (scratch) {
@@ -219,12 +187,10 @@ function reconcileObject(prev: Record<PropertyKey, unknown>, next: Record<Proper
   for (const k of Object.keys(next)) {
     const nv = unwrap(next[k]);
     const pv = readField(prev, k);
-    // Recurse into a same-shaped child to preserve its proxy identity; otherwise
-    // a plain field write (which self-dedups + fine-grained-notifies).
+    // Recurse into a same-shaped child to keep its identity; otherwise a plain field write.
     if (sameShape(pv, nv)) applyReconcile(pv as Record<PropertyKey, unknown>, nv, keyName);
     else setProperty(prev, k, nv);
   }
-  // Delete keys absent from `next` (routes through setProperty → pings $KEYS).
   for (const k of Object.keys(prev)) {
     if (!(k in next)) setProperty(prev, k, undefined);
   }
@@ -232,8 +198,7 @@ function reconcileObject(prev: Record<PropertyKey, unknown>, next: Record<Proper
 
 function reconcileArray(prevArr: unknown[], next: unknown[], keyName: string | null): void {
   const prev = prevArr as unknown as Record<PropertyKey, unknown>; // setProperty/readField view
-  // Snapshot key → existing RAW row BEFORE mutating, so matched rows keep their
-  // reference (hence their cached proxy, hence their <For> DOM row).
+  // Snapshot key → row BEFORE mutating — see AGENTS.d/240-reconcile-snapshots-key-to-row-before-mutating.md
   const byKey = new Map<unknown, Record<PropertyKey, unknown>>();
   if (keyName !== null) {
     for (let i = 0; i < prevArr.length; i++) {
@@ -255,17 +220,14 @@ function reconcileArray(prevArr: unknown[], next: unknown[], keyName: string | n
         structural = true;
       }
     } else {
-      // Genuinely new row: a fresh raw object → new proxy → <For> builds a new DOM row.
       setProperty(prev, j, nItem);
       structural = true;
     }
   }
 
-  // Truncate a shrunk tail (removed rows' <For> scopes dispose via onCleanup).
   if (prevArr.length !== next.length) setProperty(prev, "length", next.length);
 
-  // A same-length reorder/swap bumps only per-index nodes (which <For> doesn't
-  // track); ping $KEYS so <For> re-diffs and MOVES surviving rows (not rebuild).
+  // See AGENTS.d/250-a-same-length-reorder-must-ping-keys-explicitly.md
   if (structural && prevArr.length === next.length) bump(prevArr, $KEYS);
 }
 
@@ -278,7 +240,6 @@ function updatePath(current: Record<PropertyKey, unknown>, path: unknown[]): voi
   const root = path.length === 1;
   const key = root ? ROOT : (path[0] as PropertyKey);
   let value = path[path.length - 1];
-  // An in-place updater (reconcile/produce) runs its closure here.
   const u = updaterTag(value);
   if (u) {
     u(current, key);
@@ -297,25 +258,11 @@ function updatePath(current: Record<PropertyKey, unknown>, path: unknown[]): voi
   }
 }
 
-/**
- * Diff `next` into a store in place, preserving object identity so keyed `<For>`
- * rows are reused, not rebuilt. Pass the result to the setter where a value goes:
- *
- *   setStore("rows", reconcile(freshRows));       // rows matched by `id` (default)
- *   setStore("rows", reconcile(freshRows, { key: "sku" }));
- *   setStore(reconcile(freshWholeState));         // reconcile the root object
- *
- * Array rows with the same key are mutated field-by-field through the fine-grained
- * setter (only changed fields notify; unchanged rows stay silent), moved on
- * reorder, and added/removed on membership change. Nested objects/arrays recurse.
- * `key: null` opts out of identity matching (positional replace). It is a
- * COMMIT-time operation — not intended for use inside `speculate`.
- */
+/** Diff `next` into a store in place, matching rows by `key` (default "id", null = positional) and keeping object identity; pass it where the setter takes a value. */
 export function reconcile<T>(next: T, options?: { key?: string | null }): T {
   const key = options && "key" in options ? (options.key ?? null) : "id";
   const n = unwrap(next);
-  // Diff into a same-shaped target in place; otherwise plain-replace the slot
-  // (a root ROOT target can't be replaced — only diffed).
+  // A ROOT target can't be replaced, only diffed.
   const apply: StoreUpdater = (parent, k) => {
     const prev = updaterTarget(parent, k);
     if (sameShape(prev, n)) applyReconcile(prev as Record<PropertyKey, unknown>, n, key);
@@ -324,14 +271,7 @@ export function reconcile<T>(next: T, options?: { key?: string | null }): T {
   return { [$UPDATER]: apply } as unknown as T;
 }
 
-// A WRITABLE view over a raw object, distinct from the read-only store `traps`:
-// every assignment/delete routes through `setProperty`, inheriting its dedup,
-// fine-grained bump, array-length/$KEYS handling, __proto__ guard, and the
-// speculation-scratch redirect — so `produce` needs no notification code of its
-// own. `get` recurses into a nested draft over the LIVE raw child (so a write to
-// `s.rows[0].x` targets the right object, preserving its proxy identity) and
-// returns array methods as-is (they run with `this` = draft, re-entering here).
-// It does NOT `track()` — a producer's reads must not create subscriptions.
+// Writable draft view: every write routes through setProperty; reads never track().
 const draftTraps: ProxyHandler<Record<PropertyKey, unknown>> = {
   get(target, key) {
     if (key === $RAW) return target; // so unwrap(draft) resolves to the raw object
@@ -354,29 +294,14 @@ function wrapDraft<T extends object>(value: T): T {
   return new Proxy(value as Record<PropertyKey, unknown>, draftTraps) as T;
 }
 
-/**
- * Immer-style mutable-draft sugar. Mutate the draft with plain assignments and
- * array ops; each write routes through the fine-grained setter (only changed
- * fields notify), inside one batch:
- *
- *   setStore(produce((s) => { s.user.name = "Grace"; s.rows.push(row); }));
- *   setStore("rows", produce((rows) => { rows[0].status = "done"; }));
- *
- * Mutate-in-place: a matched nested object keeps its proxy identity (unlike
- * replacing it). Provenance is coarse (one write for the whole produce path).
- * For a keyed-list REORDER use `reconcile` — a same-length splice bumps only
- * per-index nodes, not $KEYS, so `<For>` wouldn't re-diff. Don't retain the
- * draft past `fn`.
- */
+/** Immer-style mutable-draft updater; reorder with `reconcile` instead (AGENTS.d/250), and never retain the draft past `fn`. */
 export function produce<T>(fn: (draft: T) => void): (prev: T) => T {
   const apply: StoreUpdater = (parent, k) => {
     const prev = updaterTarget(parent, k);
     if (isWrappable(prev)) fn(wrapDraft(prev) as unknown as T);
     else throw new Error(`pimas store: produce() target at "${String(k)}" is not an object.`);
   };
-  // A tagged FUNCTION: typed as an updater so `T` infers from the setter slot
-  // (draft-only generics can't infer). updatePath detects the tag and runs
-  // `apply` in place — the body is never invoked as an updater.
+  // Tagged function so `T` infers from the setter slot; updatePath runs `apply`, never this body.
   const tagged = (((prev: T) => prev) as ((prev: T) => T) & { [$UPDATER]: StoreUpdater });
   tagged[$UPDATER] = apply;
   return tagged;
@@ -394,23 +319,13 @@ export interface SetStoreFunction<T> {
   (...path: [PropertyKey, ...PropertyKey[], unknown]): void;
 }
 
-/**
- * Create a reactive store. Returns a read-only reactive proxy and a setter:
- *
- *   const [state, setState] = createStore({ user: { name: "Ada" }, rows: [] });
- *   state.user.name;                      // read (fine-grained subscribe)
- *   setState("user", "name", "Grace");    // path set — only name's readers re-run
- *   setState("rows", (r) => [...r, row]); // updater — replaces the array
- *   setState({ loading: false });         // merge a partial at the root
- */
+/** Create a reactive store: a read-only reactive proxy plus a path/updater/partial setter. */
 export function createStore<T extends object>(init: T): [T, SetStoreFunction<T>] {
   const raw = unwrap(init);
   const proxy = wrap(raw);
   const setStore = (...args: unknown[]): void => {
     batch(() => updatePath(raw as Record<PropertyKey, unknown>, args));
-    // L2 (#13): announce the committed write path. A speculative write records
-    // into the scratch (setProperty) and never reaches here as a real change —
-    // so speculation stays silent to provenance listeners.
+    // Speculative writes land in the scratch, so the !speculationScratch() guard keeps listeners silent.
     if (writeListeners.size && !speculationScratch() && args.length >= 2) {
       const path = args.slice(0, -1) as PropertyKey[];
       for (const l of writeListeners) l({ path });
