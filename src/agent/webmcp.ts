@@ -37,14 +37,12 @@ export interface WebMCPTool {
   /** JSON Schema (object) for the tool's arguments. */
   inputSchema: object;
   execute: (input: Record<string, unknown>) => Promise<unknown>;
-  annotations?: { readOnlyHint?: boolean; untrustedContentHint?: boolean };
+  annotations?: { readOnlyHint?: boolean };
 }
 
 /** Options accepted by `registerTool` (spec's `ModelContextRegisterToolOptions`). */
 export interface WebMCPRegisterOptions {
   signal?: AbortSignal;
-  /** Origin allowlist; default is same-origin only. */
-  exposedTo?: string[];
 }
 
 /** The minimal WebMCP host surface the projection needs. */
@@ -63,8 +61,6 @@ export interface WebMCPOptions {
    *  tools (speculate/plan/sweep — predict without committing). Default true.
    *  Set false for a poke-and-rescrape baseline (the A/B eval switch). */
   simulateTools?: boolean;
-  /** Forwarded to `registerTool` as the origin allowlist. */
-  exposedTo?: string[];
   /** Abort this to tear down all registrations (else use the returned disposer). */
   signal?: AbortSignal;
 }
@@ -94,7 +90,7 @@ export function toWebMCP(bridge: AgentBridge, opts: WebMCPOptions = {}): () => v
   }
   const controller = new AbortController();
   if (opts.signal) opts.signal.addEventListener("abort", () => controller.abort(), { once: true });
-  const regOpts: WebMCPRegisterOptions = { signal: controller.signal, exposedTo: opts.exposedTo };
+  const regOpts: WebMCPRegisterOptions = { signal: controller.signal };
   const tools = toolsForDescriptor(bridge, bridge.descriptor(), opts);
   for (const tool of tools.values()) host.registerTool(tool, regOpts);
 

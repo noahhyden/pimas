@@ -29,7 +29,6 @@ export interface PageAgent {
 
 export interface PageAgentOptions {
   namespace?: string;
-  key?: string;
 }
 
 function actionFrom(body: { action?: string }): string {
@@ -130,27 +129,24 @@ export async function installPageAgent(
     call: bridge.call.bind(bridge),
   };
 
-  const key = opts.key ?? "__pimas";
   const target = globalThis as typeof globalThis & Record<string, unknown>;
   if (opts.namespace) {
-    const current = target[key];
+    const current = target["__pimas"];
     const root =
       current !== null && typeof current === "object"
         ? (current as Record<string, unknown>)
         : ({} as Record<string, unknown>);
     root[opts.namespace] = pageAgent;
-    target[key] = root;
+    target["__pimas"] = root;
   } else {
-    target[key] = pageAgent;
+    target["__pimas"] = pageAgent;
   }
 
   const descriptor = await bridge.descriptor();
   for (const [name, tool] of toolsForDescriptor(bridge, descriptor)) tools.set(name, tool);
 
   if (detectModelContext()) {
-    const webBridge = Object.assign(Object.create(bridge), bridge, {
-      descriptor: () => descriptor,
-    }) as AgentBridge;
+    const webBridge = { ...bridge, descriptor: () => descriptor } as AgentBridge;
     toWebMCP(webBridge, { namespace: opts.namespace });
   }
 
