@@ -8,7 +8,7 @@ export default defineConfig({
   },
   test: {
     environment: "happy-dom",
-    exclude: ["**/node_modules/**", "**/dist/**"],
+    exclude: ["**/node_modules/**", "**/dist/**", "**/.claude/**"],
     coverage: {
       provider: "v8",
       include: ["src/**/*.ts"],

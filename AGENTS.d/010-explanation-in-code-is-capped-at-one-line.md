@@ -1,3 +1,3 @@
 ## Explanation in code is capped at ONE line
 
-`check-one-line-comments.mjs` fails any block comment or standalone `//` run over one line in `.ts`/`.tsx`/`.mjs`, against a per-file baseline that may only shrink; `.yml` `#` runs have no baseline at all, and a run carrying a tooling pragma is exempt.
+`check-one-line-comments.mjs` fails any block comment or standalone `//` run over one line in `.ts`/`.tsx`/`.mjs`, and any `#` run in `.yml`. It keeps no baseline, so the count is zero and a new violation is red on the PR adding it. Pragmas are exempt.
