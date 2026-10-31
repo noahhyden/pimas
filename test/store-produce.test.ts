@@ -1,6 +1,4 @@
-/**
- * produce — Immer-style mutable-draft sugar over the store's setter.
- */
+/** produce — Immer-style mutable-draft sugar over the store setter. */
 import { describe, it, expect, vi } from "vitest";
 import { createRoot, createEffect } from "pimas";
 import { createStore, produce } from "pimas/store";

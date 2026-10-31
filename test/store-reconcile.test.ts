@@ -1,6 +1,4 @@
-/**
- * reconcile — diff external data into a store preserving row identity.
- */
+/** reconcile — diff external data into a store preserving row identity. */
 import { describe, it, expect, vi } from "vitest";
 import { createRoot, createEffect } from "pimas";
 import { createStore, reconcile, onStoreWrite } from "pimas/store";
