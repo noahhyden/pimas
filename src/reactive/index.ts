@@ -12,7 +12,6 @@ export {
   flushSync,
   untrack,
   speculate,
-  isSpeculating,
   speculationScratch,
   getListener,
   onCleanup,

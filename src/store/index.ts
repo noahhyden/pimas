@@ -271,37 +271,30 @@ function reconcileArray(prevArr: unknown[], next: unknown[], keyName: string | n
 
 /** Walk `[...keys, value]`: navigate by the keys, apply `value` at the leaf. */
 function updatePath(current: Record<PropertyKey, unknown>, path: unknown[]): void {
-  if (path.length === 1) {
-    let value = path[0];
-    // A root-level in-place updater (reconcile/produce) runs its closure here.
-    const u = updaterTag(value);
-    if (u) {
-      u(current, ROOT);
-      return;
-    }
-    // Merge a partial object (or updater→partial) into `current`.
-    if (typeof value === "function") value = (value as (c: unknown) => unknown)(current);
-    if (value && typeof value === "object") {
-      for (const k of Object.keys(value as object)) {
-        setProperty(current, k, (value as Record<string, unknown>)[k]);
-      }
-    }
+  if (path.length > 2) {
+    updatePath(current[path[0] as PropertyKey] as Record<PropertyKey, unknown>, path.slice(1));
     return;
   }
-  const key = path[0] as PropertyKey;
-  if (path.length === 2) {
-    let value = path[1];
-    // A keyed in-place updater (reconcile/produce) runs its closure here.
-    const u = updaterTag(value);
-    if (u) {
-      u(current, key);
-      return;
-    }
-    if (typeof value === "function") value = (value as (p: unknown) => unknown)(current[key]);
+  const root = path.length === 1;
+  const key = root ? ROOT : (path[0] as PropertyKey);
+  let value = path[path.length - 1];
+  // An in-place updater (reconcile/produce) runs its closure here.
+  const u = updaterTag(value);
+  if (u) {
+    u(current, key);
+    return;
+  }
+  if (typeof value === "function") {
+    value = (value as (p: unknown) => unknown)(root ? current : current[key as string]);
+  }
+  if (!root) {
     setProperty(current, key, value);
-    return;
+  } else if (value && typeof value === "object") {
+    // Merge a partial object (or updater→partial) into `current`.
+    for (const k of Object.keys(value as object)) {
+      setProperty(current, k, (value as Record<string, unknown>)[k]);
+    }
   }
-  updatePath(current[key] as Record<PropertyKey, unknown>, path.slice(1));
 }
 
 /**
@@ -389,8 +382,6 @@ export function produce<T>(fn: (draft: T) => void): (prev: T) => T {
   return tagged;
 }
 
-export type Store<T> = T;
-
 export interface SetStoreFunction<T> {
   (value: Partial<T> | ((prev: T) => Partial<T> | void)): void;
   <K extends keyof T>(key: K, value: T[K] | ((prev: T[K]) => T[K])): void;
@@ -412,7 +403,7 @@ export interface SetStoreFunction<T> {
  *   setState("rows", (r) => [...r, row]); // updater — replaces the array
  *   setState({ loading: false });         // merge a partial at the root
  */
-export function createStore<T extends object>(init: T): [Store<T>, SetStoreFunction<T>] {
+export function createStore<T extends object>(init: T): [T, SetStoreFunction<T>] {
   const raw = unwrap(init);
   const proxy = wrap(raw);
   const setStore = (...args: unknown[]): void => {
