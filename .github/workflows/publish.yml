@@ -1,24 +1,6 @@
 name: Publish to npm
 
-# Publishes ONLY from CI, ONLY from a GitHub Release (or a manual dispatch),
-# with cryptographic PROVENANCE via OIDC. This is the supply-chain guarantee:
-# the tarball on npm is built here from the public, tagged source — not from
-# anyone's laptop — and npm records a verifiable "Built and signed on GitHub
-# Actions" attestation linking the package to this exact commit + workflow.
-#
-# Auth: npm Trusted Publishing (OIDC) — NO long-lived token, nothing to leak.
-# npm mints a short-lived credential from the `id-token` below at publish time.
-# Configure it once on npmjs.com: package `pimas-ui` → Settings → Trusted
-# Publisher → GitHub Actions, user/org noahhyden, repo pimas, workflow filename
-# "publish.yml", allowed action "npm publish". (Then, recommended: package →
-# Publishing access → "Require 2FA and disallow tokens".)
-#
-# BOOTSTRAP (one-time): npm has no pre-registration for a package that doesn't
-# exist yet, so a trusted publisher can't be configured until `pimas-ui` exists.
-# Publish v0.1.0 ONCE from a maintainer machine (`npm login` + `npm publish
-# --access public` — interactive 2FA, no CI token), then set up the trusted
-# publisher above. Every release after that runs here, tokenless, with provenance.
-# Requires npm >= 11.5.1 and Node >= 22.14 (satisfied by node 24 + npm@latest).
+# Tokenless OIDC trusted publishing from a GitHub Release - see AGENTS.d/030-publishing-is-tokenless-oidc-from-a-release.md.
 on:
   release:
     types: [published]
@@ -40,12 +22,9 @@ jobs:
           cache: npm
       - run: npm install -g npm@latest # ensure OIDC/provenance support
       - run: npm ci
-      # Re-verify the exact source we're about to ship — defense in depth.
       - run: node scripts/check-package.mjs # refuse to publish if runtime deps leaked in
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
-      # prepack rebuilds dist; --provenance emits the signed attestation.
-      # No NODE_AUTH_TOKEN: OIDC trusted publishing supplies the credential from
-      # the id-token permission above (a stray empty token env can shadow OIDC).
+      # prepack rebuilds dist; --provenance signs it. No NODE_AUTH_TOKEN - see the rule above.
       - run: npm publish --provenance --access public

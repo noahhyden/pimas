@@ -23,4 +23,6 @@ jobs:
       - run: npm run typecheck
       - run: npm run coverage
       - run: npm run size
+      - run: npm run lint:comments
+      - run: npm run lint:rules
       - run: npm run build

@@ -1,6 +1,4 @@
-/**
- * Per-import gzip budgets. React is external — we measure our adapter, not React.
- */
+/** Per-import gzip budgets. React is external — we measure our adapter, not React. */
 import { build } from "esbuild";
 import { gzipSync } from "node:zlib";
 import { fileURLToPath } from "node:url";

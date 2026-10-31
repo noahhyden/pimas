@@ -1,6 +1,4 @@
-/**
- * Supply-chain guard: pimas ships ZERO runtime dependencies.
- */
+/** Supply-chain guard: pimas ships ZERO runtime dependencies. */
 import { readFileSync } from "node:fs";
 
 const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
