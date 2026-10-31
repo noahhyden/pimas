@@ -5,18 +5,9 @@ import { build } from "esbuild";
 import { gzipSync } from "node:zlib";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
+import { esbuildAliases as alias } from "./aliases.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const src = (p) => resolve(root, "src", p);
-
-const alias = {
-  pimas: src("reactive/index.ts"),
-  "pimas/store": src("store/index.ts"),
-  "pimas/agent": src("agent/index.ts"),
-  "pimas/agent/webmcp": src("agent/webmcp.ts"),
-  "pimas/agent/page": src("agent/page.ts"),
-  "pimas/react": src("react/index.ts"),
-};
 
 const fixtures = {
   "core: signal only": [`import { createSignal } from "pimas"; createSignal(0);`, 770],
