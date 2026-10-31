@@ -1,20 +1,4 @@
-/**
- * Fine-grained reactive core (push-pull, glitch-free).
- *
- * Reading a signal subscribes the running computation; writing it re-runs only
- * the computations that depend on it. Propagation is two-phase:
- *
- *   PUSH (on write): mark dependents without computing. Direct dependents become
- *     DIRTY; everything transitively below becomes CHECK.
- *   PULL (on read / effect flush): a CHECK node walks its sources first and
- *     recomputes only if a source actually changed.
- *
- * Diamonds recompute once. Equal values stop the cascade. Memos are lazy;
- * effects are eager. Algorithm after Milo Hansen's "Reactively".
- *
- * `speculate` evaluates hypothetical writes against a shadow of this graph:
- * memos recompute, effects do not fire, the real graph is never mutated.
- */
+/** Fine-grained push-pull reactive core: writes mark (PUSH), reads and effect flushes recompute (PULL) — see AGENTS.d/100-a-memo-is-lazy-and-an-effect-is-eager.md. */
 
 // ── Node model ───────────────────────────────────────────────────────────
 
@@ -54,18 +38,11 @@ let batchDepth = 0;
 /** Effects marked dirty/check, awaiting a flush. */
 const effectQueue: Reactive[] = [];
 let flushing = false;
-/** A custom flush scheduler, or `null` for the synchronous default. When set,
- *  a synchronous write-burst is coalesced into one deferred `flush()` call
- *  (e.g. via `queueMicrotask`). Null keeps the write→flush path a direct call —
- *  the seam costs the common case only a single branch. */
+/** A custom flush scheduler, or `null` for the synchronous default — see AGENTS.d/140-the-default-scheduler-is-synchronous.md. */
 let scheduler: ((flush: () => void) => void) | null = null;
 /** Latch: a deferred flush is already queued for this scheduler turn. */
 let scheduled = false;
-/** Non-null while a `speculate(...)` what-if evaluation is in progress (L3, #13).
- *  Reads/writes route through its methods; the heavy shadow logic lives in
- *  `speculate` (tree-shaken away for anyone who never imports it) so the core's
- *  hot read/write path pays only a single null-check. The real graph is never
- *  touched during speculation. */
+/** Non-null while a `speculate(...)` is running; reads/writes route through it and the real graph is never touched. */
 let speculating: {
   read<T>(n: Reactive<T>): T;
   write<T>(n: Reactive<T>, v: T): T;
@@ -179,10 +156,7 @@ function flushEffects(): void {
   }
 }
 
-/** Flush now (the default) or hand the drain to a custom scheduler, coalescing a
- *  write-burst into one turn. The latch is cleared *before* the drain so that
- *  writes made inside a running effect are serialized by the `flushing` guard
- *  (not the latch) — the drain loop picks them up in the same pass. */
+/** Flush now, or hand the drain to the custom scheduler — see AGENTS.d/120-the-flush-latch-clears-before-the-drain.md. */
 function requestFlush(): void {
   if (!scheduler) return flushEffects();
   if (scheduled) return;
@@ -190,24 +164,13 @@ function requestFlush(): void {
   scheduler(flushScheduled);
 }
 
-/** The bound drain a custom scheduler runs — shared (not per-request) so the
- *  common no-scheduler path allocates nothing. */
+/** The shared drain a custom scheduler runs; clears the latch before draining. */
 function flushScheduled(): void {
   scheduled = false;
   flushEffects();
 }
 
-/**
- * Install a custom flush scheduler (e.g. `(flush) => queueMicrotask(flush)`) to
- * coalesce a burst of synchronous writes into one deferred flush — effects still
- * run in FIFO enqueue order, just later. Pass nothing (or `null`) to restore the
- * synchronous default. Returns the previous scheduler so callers can nest/restore.
- *
- * The default is synchronous because `renderToString` and post-write DOM reads
- * depend on effects having flushed by the time the write call returns; deferring
- * is strictly opt-in (a client-side perf choice — see `flushSync` for the escape
- * hatch when a custom scheduler is installed).
- */
+/** Install a custom flush scheduler (e.g. `queueMicrotask`); pass nothing to restore the synchronous default, returns the previous one. */
 export function setScheduler(
   fn?: ((flush: () => void) => void) | null,
 ): ((flush: () => void) => void) | null {
@@ -216,11 +179,7 @@ export function setScheduler(
   return prev;
 }
 
-/** Force any queued effects to drain synchronously now, regardless of the
- *  installed scheduler. The escape hatch for code that must observe up-to-date
- *  state immediately (SSR, tests) while a deferred scheduler is active. Clears
- *  the pending-flush latch so a scheduler that *dropped* its callback (or one
- *  being torn down) can't wedge all future flushes. */
+/** Drain queued effects now regardless of the scheduler, clearing the latch so a dropped callback can't wedge flushing. */
 export function flushSync(): void {
   scheduled = false;
   flushEffects();
@@ -256,10 +215,7 @@ export interface Owner {
   cleanups: Array<() => void>;
 }
 
-/**
- * A reactive value. `count()` reads (and subscribes); `setCount(v)` writes.
- * Functional updates supported: `setCount(n => n + 1)`.
- */
+/** A reactive value: `count()` reads and subscribes, `setCount(v)` or `setCount(n => n + 1)` writes. */
 export function createSignal<T>(initial: T): Signal<T> {
   const node = makeNode<T>(undefined, initial, false);
   const read: Accessor<T> = () => readNode(node);
@@ -268,21 +224,14 @@ export function createSignal<T>(initial: T): Signal<T> {
   return [read, write];
 }
 
-/**
- * A cached derived value. LAZY — it computes on first read and recomputes only
- * when a dependency truly changes. Reading it subscribes you like any signal.
- */
+/** A cached derived value; lazy, computes on first read and recomputes only when a dependency truly changes. */
 export function createMemo<T>(fn: () => T): Accessor<T> {
   const node = makeNode<T>(fn, undefined, false);
   if (currentOwner) currentOwner.owned.push(node);
   return () => readNode(node);
 }
 
-/**
- * Run `fn` now, and again whenever a signal it read changes. Effects are eager:
- * they're the roots that drive the pull. Dependencies are re-collected each run,
- * so conditional branches subscribe only to what they actually read.
- */
+/** Run `fn` now and again whenever a signal it read changes; dependencies are re-collected each run. */
 export function createEffect(fn: () => void): void {
   const node = makeNode<void>(fn, undefined, true);
   if (currentOwner) currentOwner.owned.push(node);
@@ -301,44 +250,21 @@ export function batch<T>(fn: () => T): T {
   }
 }
 
-/**
- * The computation currently tracking, or null outside any effect/memo. Lets
- * userland primitives (e.g. `pimas/store`) skip work when nobody is listening —
- * a store read outside a reactive scope then creates no signal. Opaque handle;
- * treat it as truthy/falsy.
- */
+/** The computation currently tracking, or null outside any effect/memo; an opaque handle, treat it as truthy/falsy. */
 export function getListener(): unknown {
   return currentObserver;
 }
 
-/**
- * The current speculation's rollback-scoped scratchpad, or null when not
- * speculating. Lets a userland primitive (e.g. `pimas/store`) shadow its own
- * out-of-graph state (copy-on-write) during a `speculate(...)`, discarded for
- * free when the speculation ends.
- */
+/** The current speculation's rollback-scoped scratchpad, or null when not speculating. */
 export function speculationScratch(): Map<unknown, unknown> | null {
   return speculating ? speculating.scratch : null;
 }
 
-/**
- * L3 what-if oracle (issue #13). Apply hypothetical writes in `apply`, then
- * evaluate `read` — both against a SHADOW of the reactive graph. Reads see the
- * hypothetical values and memos recompute against them, but the real graph is
- * never mutated and NO effects fire; the whole thing rolls back on exit (drop
- * the shadow map). Returns `read`'s result.
- *
- * Lets you ask "what would derived state become if I did X?" and get an exact
- * answer from the model's own memos — before committing anything. Correct for
- * pure memos. Store writes are copy-on-write via `speculationScratch`. No nesting.
- */
+/** Apply hypothetical writes in `apply`, return `read()` against a shadow graph: no real mutation, no effects, rolled back on exit; no nesting. */
 export function speculate<T>(apply: () => void, read: () => T): T {
   if (speculating) throw new Error("speculate: no nested speculation yet");
   const values = new Map<Reactive, unknown>();
-  // A shadow read: hypothetical value if one was written; else for a memo,
-  // recompute against the shadow — fully detached (no subscription, no
-  // ownership) so nothing real is mutated — and memoize (diamonds compute once);
-  // else a plain signal's real committed value. Correct for pure memos.
+  // Shadow read: hypothetical value, else a detached memoized memo recompute, else the real value — see AGENTS.d/130-speculate-detaches-the-observer-and-owner.md
   const spec = {
     read<U>(node: Reactive<U>): U {
       if (values.has(node)) return values.get(node) as U;
@@ -380,9 +306,7 @@ export function speculate<T>(apply: () => void, read: () => T): T {
 
 // ── Topology introspection (L0, issue #37) ─────────────────────────────────
 
-/** A node of the dependency graph, projected to a plain read-only shape (never
- *  the raw `Reactive` — a caller must not be able to mutate `sources`/`observers`
- *  and corrupt the graph). */
+/** A node of the dependency graph as a plain read-only shape, never the raw `Reactive`. */
 export interface GraphNode {
   /** Stable for a node's lifetime (lazily assigned on first introspection). */
   id: string;
@@ -402,9 +326,7 @@ export interface DependencyGraph {
   edges: GraphEdge[];
 }
 
-/** Lazily-assigned stable ids. A WeakMap (not a field on the node) keeps the hot
- *  node shape + size budget untouched (D#5) and lets a node be GC'd normally — an
- *  id is minted only for the nodes that are actually introspected. */
+/** Lazily-assigned stable ids in a WeakMap, so the hot node shape stays untouched. */
 const nodeIds = new WeakMap<Reactive, string>();
 let nodeIdSeq = 0;
 function idOf(n: Reactive): string {
@@ -414,25 +336,7 @@ function idOf(n: Reactive): string {
 }
 const kindOf = (n: Reactive): GraphNode["kind"] => (n.fn ? "memo" : "signal");
 
-/**
- * Read-only structural introspection of the dependency graph (the L0 surface
- * beneath L1 subscribe / L2 explain / L3 speculate — issue #37). Given named seed
- * reads, run each in a throwaway tracking scope to discover the node(s) it reads —
- * leaving NO subscription behind — then walk `sources` transitively to build the
- * derives-from DAG those seeds depend on.
- *
- * The scope is exactly the transitive `sources` closure of the seeds: signals
- * (roots) and memos (interior). Effects are downstream `observers`, not sources,
- * of the seeds, so they never appear — the result is "what the exposed state
- * derives from," matching the privacy boundary a caller has already drawn by
- * choosing which reads to pass. A seed whose read touches exactly one node names
- * that node (the idiomatic `expose(name, memo)` / `() => store.field` form); a
- * composite read's inputs still appear as nodes but back no single name.
- *
- * A snapshot: topology is re-collected on every recompute, so this reflects the
- * committed structure as-of the call. NOT re-exported from the public `pimas`
- * core (see `index.ts`) — `bridge.graph()` is the documented, scoped entry point.
- */
+/** Snapshot the derives-from DAG (signals and memos only, never effects) behind named seed reads, leaving no subscription; not public, use `bridge.graph()`. */
 export function introspectGraph(seeds: Iterable<readonly [string, () => unknown]>): DependencyGraph {
   const nodes = new Map<Reactive, GraphNode>();
   const edges: GraphEdge[] = [];
@@ -447,8 +351,6 @@ export function introspectGraph(seeds: Iterable<readonly [string, () => unknown]
   };
 
   for (const [name, read] of seeds) {
-    // Run the accessor in a throwaway observer to discover the node(s) it reads,
-    // then unsubscribe the probe so introspection leaves the real graph untouched.
     const probe = makeNode<unknown>(undefined, undefined, false);
     const prevObserver = currentObserver;
     const prevOwner = currentOwner;
@@ -488,11 +390,7 @@ export function onCleanup(fn: () => void): void {
   if (currentOwner) currentOwner.cleanups.push(fn);
 }
 
-/**
- * Subscribe to an accessor. `listener` runs immediately and again whenever
- * anything `read` touched changes. Returns an unsubscribe that disposes the
- * underlying effect. The same primitive the React hook and the agent bridge use.
- */
+/** Run `listener` now and whenever anything `read` touched changes; returns an unsubscribe. */
 export function subscribe<T>(read: Accessor<T>, listener: (value: T) => void): () => void {
   let dispose!: () => void;
   createRoot((d) => {
@@ -502,10 +400,7 @@ export function subscribe<T>(read: Accessor<T>, listener: (value: T) => void): (
   return dispose;
 }
 
-/**
- * A top-level scope that doesn't auto-dispose. Everything created inside is
- * owned by it; call the provided `dispose` to tear it all down at once.
- */
+/** A top-level scope that never auto-disposes; call the provided `dispose` to tear down everything created inside. */
 export function createRoot<T>(fn: (dispose: () => void) => T): T {
   const owner = makeNode<void>(undefined, undefined, false);
   const prevOwner = currentOwner;
@@ -525,8 +420,8 @@ function handleError(err: unknown, from: Reactive | null): void {
     const h = node.errorHandler;
     if (h) {
       const prevOwner = currentOwner, prevObs = currentObserver;
-      currentOwner = node.owner;   // run handler at the boundary's PARENT scope,
-      currentObserver = null;      // so a rethrow escapes to the NEXT boundary up
+      currentOwner = node.owner;   // PARENT scope — see AGENTS.d/110-handleerror-runs-the-handler-at-the-boundarys-parent-scope.md
+      currentObserver = null;
       try { h(err); }
       catch (e) { handleError(e, node.owner); }
       finally { currentOwner = prevOwner; currentObserver = prevObs; }
@@ -536,11 +431,7 @@ function handleError(err: unknown, from: Reactive | null): void {
   throw err;
 }
 
-/**
- * Run `tryFn` in a scope carrying `handler`. Any error thrown synchronously by
- * `tryFn`, or later by an effect/memo created inside it, routes to `handler`.
- * If `handler` rethrows, the error propagates to the next enclosing boundary.
- */
+/** Run `tryFn` in a scope whose `handler` receives errors from `tryFn` and the effects/memos created inside it; a rethrow goes to the next boundary up. */
 export function catchError<T>(tryFn: () => T, handler: (err: unknown) => void): T | undefined {
   const scope = makeNode<void>(undefined, undefined, false);
   scope.errorHandler = handler;

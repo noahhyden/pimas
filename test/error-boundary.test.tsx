@@ -170,9 +170,7 @@ describe("catchError (reactive core)", () => {
   });
 
   it("(9) NOT caught: a throw inside an event-handler-style callback escapes", () => {
-    // catchError only guards synchronous tryFn and reactive re-runs it owns.
-    // A callback invoked later (e.g. a DOM event handler) runs outside that
-    // scope, so its throw is NOT routed to the boundary — it escapes.
+    // A callback invoked later (e.g. a DOM event handler) runs outside the scope, so its throw escapes.
     let handler!: () => void;
     catchError(
       () => {

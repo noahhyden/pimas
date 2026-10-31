@@ -1,8 +1,4 @@
-/**
- * pimas — reactive core. Headless: signals, memos, effects, speculate.
- * No DOM. Pair with `pimas-ui/react` to bind a model into a React tree,
- * or `pimas-ui/agent` to expose it to an agent.
- */
+/** pimas reactive core: headless signals, memos, effects and speculate; pair with `pimas-ui/react` or `pimas-ui/agent`. */
 export {
   createSignal,
   createEffect,
