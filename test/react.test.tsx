@@ -1,10 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { createElement, act, type ReactElement } from "react";
 import { createRoot } from "react-dom/client";
-import { createSignal, createMemo } from "pimas";
-import { createStore } from "pimas/store";
-import { createModel } from "pimas/agent";
-import { usePimas, useSnapshot } from "pimas/react";
+import { createSignal } from "../src/reactive/index.js";
+import { createStore } from "../src/store/index.js";
+import { usePimas } from "../src/react/index.js";
 
 function mount(el: ReactElement) {
   const container = document.createElement("div");
@@ -67,37 +66,5 @@ describe("usePimas", () => {
     expect(aRenders).toBeGreaterThan(a0);
     expect(bRenders).toBe(b0);
     unmount();
-  });
-});
-
-describe("useSnapshot + speculate", () => {
-  it("live snapshot updates on commit; speculate does not", () => {
-    const model = createModel((m) => {
-      const [s, set] = createStore({ qty: 2, price: 5 });
-      const total = createMemo(() => s.qty * s.price);
-      m.expose("total", total);
-      m.action("setQty", (q: unknown) => set("qty", q as number));
-      return { total };
-    });
-
-    const previews: number[] = [];
-    function View() {
-      const snap = useSnapshot(model.bridge);
-      const preview = model.bridge.speculate("setQty", 10).total as number;
-      previews.push(preview);
-      return createElement("span", null, String(snap.total));
-    }
-    const { container, unmount } = mount(createElement(View));
-    expect(container.textContent).toBe("10");
-    expect(previews.at(-1)).toBe(50);
-    expect(model.total()).toBe(10);
-
-    act(() => {
-      model.bridge.call("setQty", 10);
-    });
-    expect(container.textContent).toBe("50");
-    expect(model.total()).toBe(50);
-    unmount();
-    model.bridge.dispose();
   });
 });

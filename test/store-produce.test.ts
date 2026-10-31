@@ -1,7 +1,7 @@
 /** produce — Immer-style mutable-draft sugar over the store setter. */
 import { describe, it, expect, vi } from "vitest";
-import { createRoot, createEffect } from "pimas";
-import { createStore, produce } from "pimas/store";
+import { createRoot, createEffect } from "../src/reactive/index.js";
+import { createStore, produce } from "../src/store/index.js";
 
 describe("produce — draft maps to fine-grained writes", () => {
   it("notifies only the mutated field", () => {

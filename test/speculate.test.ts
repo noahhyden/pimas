@@ -1,7 +1,7 @@
 /** `speculate(apply, read)` evaluates hypothetical writes against a shadow graph and rolls back on exit. */
 import { describe, it, expect, vi } from "vitest";
-import { createSignal, createMemo, createEffect, createRoot, speculate } from "pimas";
-import { createStore } from "pimas/store";
+import { createSignal, createMemo, createEffect, createRoot, speculate } from "../src/reactive/index.js";
+import { createStore } from "../src/store/index.js";
 
 describe("speculate — L3 what-if oracle (issue #13)", () => {
   it("predicts a derived value under a hypothetical write, then rolls back", () => {

@@ -42,8 +42,8 @@ export interface ActionMeta {
 
 /** A machine-readable description of the surface — the artifact an agent reads. */
 export interface AgentDescriptor {
-  state: Record<string, { value: unknown; schema?: object; description?: string }>;
-  actions: Record<string, { input?: object; params?: string[]; description?: string; readOnly?: boolean }>;
+  state: Record<string, StateMeta & { value: unknown }>;
+  actions: Record<string, ActionMeta>;
 }
 
 /** The surface handed to `setup` — registers state/actions inside the root owner. */
@@ -80,8 +80,6 @@ export interface AgentBridge {
   speculate(actionName: string, ...args: unknown[]): Record<string, unknown>;
   /** Predict the exposed state after applying all `steps` in order against one shadow graph; nothing commits. */
   speculatePlan(steps: Array<[string, ...unknown[]]>): Record<string, unknown>;
-  /** One independent speculation of `actionName` per arg-set; nothing commits. */
-  speculateSweep(actionName: string, argsList: unknown[][]): Record<string, unknown>[];
   /** Apply a plan for real in one batch with one coalesced `action:"plan"` record; returns the committed state. */
   commitPlan(steps: Array<[string, ...unknown[]]>): Record<string, unknown>;
   /** Tear down every exposed subscription (disposes the root owner). */
@@ -177,20 +175,9 @@ export function createAgentBridge(setup: (r: AgentRegistrar) => void, opts: Agen
     }),
     descriptor: () => {
       const state: AgentDescriptor["state"] = {};
-      for (const [name, value] of latest) {
-        const meta = stateMeta.get(name);
-        state[name] = { value, schema: meta?.schema, description: meta?.description };
-      }
+      for (const [name, value] of latest) state[name] = { value, ...stateMeta.get(name) };
       const actionsOut: AgentDescriptor["actions"] = {};
-      for (const name of actions.keys()) {
-        const meta = actionMeta.get(name);
-        actionsOut[name] = {
-          input: meta?.input,
-          params: meta?.params,
-          description: meta?.description,
-          readOnly: meta?.readOnly,
-        };
-      }
+      for (const name of actions.keys()) actionsOut[name] = { ...actionMeta.get(name) };
       return { state, actions: actionsOut };
     },
     // `reads` is the privacy boundary — see AGENTS.d/313-introspectgraph-is-deep-imported-from-the-kernel-and-reads-is-the-privacy-boundary.md
@@ -237,11 +224,6 @@ export function createAgentBridge(setup: (r: AgentRegistrar) => void, opts: Agen
       return coreSpeculate(() => {
         for (const [name, ...args] of steps) requireAction(name)(...args);
       }, readAllExposed);
-    },
-    speculateSweep(actionName, argsList) {
-      // Each arg-set gets a fresh top-level shadow so speculations never nest.
-      const fn = requireAction(actionName);
-      return argsList.map((args) => coreSpeculate(() => void fn(...args), readAllExposed));
     },
     commitPlan(steps) {
       const prov = withProvenance("plan", steps);

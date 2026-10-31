@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
-import { createRoot, createEffect } from "pimas";
-import { createStore, unwrap } from "pimas/store";
+import { createRoot, createEffect } from "../src/reactive/index.js";
+import { createStore, unwrap } from "../src/store/index.js";
 
 describe("createStore — fine-grained reactivity", () => {
   it("subscribes per field: an effect on one field ignores another's changes", () => {

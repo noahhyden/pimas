@@ -22,7 +22,6 @@ interface Reactive<T = any> {
   owner: Reactive | null;
   owned: Reactive[];
   cleanups: Array<() => void>;
-  equals: (a: T, b: T) => boolean;
   /** Error handler installed at this scope (a boundary). Walked up the owner chain. */
   errorHandler?: (err: unknown) => void;
 }
@@ -50,8 +49,6 @@ let speculating: {
   scratch: Map<unknown, unknown>;
 } | null = null;
 
-const defaultEquals = <T>(a: T, b: T) => Object.is(a, b);
-
 function makeNode<T>(fn: (() => T) | undefined, value: T | undefined, effect: boolean): Reactive<T> {
   return {
     value,
@@ -64,7 +61,6 @@ function makeNode<T>(fn: (() => T) | undefined, value: T | undefined, effect: bo
     owner: currentOwner,
     owned: [],
     cleanups: [],
-    equals: defaultEquals,
   };
 }
 
@@ -84,7 +80,7 @@ function readNode<T>(node: Reactive<T>): T {
 
 function writeNode<T>(node: Reactive<T>, next: T): T {
   if (speculating) return speculating.write(node, next); // L3: shadow write
-  if (node.equals(node.value as T, next)) return node.value as T; // no-op on equal
+  if (Object.is(node.value as T, next)) return node.value as T; // no-op on equal
   node.value = next;
   // PUSH: mark direct dependents DIRTY (transitive ones become CHECK).
   for (const o of node.observers) stale(o, DIRTY);
@@ -129,7 +125,7 @@ function update<T>(node: Reactive<T>): void {
   currentOwner = node;
   try {
     const next = node.fn!();
-    if (!node.equals(node.value as T, next)) {
+    if (!Object.is(node.value as T, next)) {
       node.value = next;
       for (const o of node.observers) o.state = DIRTY; // real change → dependents dirty
     }
@@ -210,10 +206,6 @@ function dispose(node: Reactive): void {
 export type Accessor<T> = () => T;
 export type Setter<T> = (value: T | ((prev: T) => T)) => T;
 export type Signal<T> = [get: Accessor<T>, set: Setter<T>];
-export interface Owner {
-  owned: Reactive[];
-  cleanups: Array<() => void>;
-}
 
 /** A reactive value: `count()` reads and subscribes, `setCount(v)` or `setCount(n => n + 1)` writes. */
 export function createSignal<T>(initial: T): Signal<T> {

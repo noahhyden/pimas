@@ -16,4 +16,4 @@ export {
   catchError,
 } from "./reactive.js";
 
-export type { Accessor, Setter, Signal, Owner } from "./reactive.js";
+export type { Accessor, Setter, Signal } from "./reactive.js";

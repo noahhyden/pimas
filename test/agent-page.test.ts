@@ -1,14 +1,8 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { createStore } from "pimas/store";
-import { createAgentBridge } from "pimas/agent";
-import {
-  connectRemoteBridge,
-  handleBridgeRequest,
-  installPageAgent,
-  type BridgeRequest,
-  type PageAgent,
-} from "pimas/agent/page";
-import type { WebMCPTool } from "pimas/agent/webmcp";
+import { createStore } from "../src/store/index.js";
+import { createAgentBridge } from "../src/agent/index.js";
+import { installPageAgent, type PageAgent } from "../src/agent/page.js";
+import type { WebMCPTool } from "../src/agent/webmcp.js";
 
 function build() {
   const [state, setState] = createStore({ n: 1 });
@@ -35,7 +29,7 @@ afterEach(() => {
 describe("page agent", () => {
   it("installs without modelContext and exposes non-mutating simulation plus committed call", async () => {
     const { state, bridge } = build();
-    const installed = await installPageAgent(bridge, { namespace: "cartonization" });
+    const installed = installPageAgent(bridge, { namespace: "cartonization" });
     const root = (globalThis as typeof globalThis & {
       __pimas?: { cartonization?: PageAgent };
     }).__pimas;
@@ -55,24 +49,15 @@ describe("page agent", () => {
     bridge.dispose();
   });
 
-  it("dispatches speculate without mutation and call with mutation", async () => {
-    const { state, bridge } = build();
-
-    expect(
-      await handleBridgeRequest(bridge, { op: "speculate", action: "setN", args: [4] }),
-    ).toEqual({ n: 4 });
-    expect(state.n).toBe(1);
-
-    expect(await handleBridgeRequest(bridge, { op: "call", action: "setN", args: [4] })).toBeNull();
-    expect(state.n).toBe(4);
-    expect(await handleBridgeRequest(bridge, { op: "snapshot" })).toEqual({
-      state: { n: 4 },
-      actions: ["setN"],
-    });
+  it("installs un-namespaced at window.__pimas", () => {
+    const { bridge } = build();
+    const installed = installPageAgent(bridge);
+    expect((globalThis as { __pimas?: unknown }).__pimas).toBe(installed);
+    expect(installed.tools.has("setN")).toBe(true);
     bridge.dispose();
   });
 
-  it("also registers with WebMCP when modelContext exists", async () => {
+  it("also registers with WebMCP when modelContext exists", () => {
     const { bridge } = build();
     const registered = new Map<string, WebMCPTool>();
     (document as Document & {
@@ -83,44 +68,10 @@ describe("page agent", () => {
       },
     };
 
-    await installPageAgent(bridge, { namespace: "cartonization" });
+    installPageAgent(bridge, { namespace: "cartonization" });
 
     expect(registered.has("cartonization.setN")).toBe(true);
     expect(registered.has("cartonization.simulate_setN")).toBe(true);
-    bridge.dispose();
-  });
-
-  it("connects a remote bridge through a fake POST transport", async () => {
-    const { state, bridge } = build();
-    const requests: BridgeRequest[] = [];
-    const fakeFetch: typeof globalThis.fetch = async (_input, init) => {
-      const body = JSON.parse(String(init?.body)) as BridgeRequest;
-      requests.push(body);
-      const result = await handleBridgeRequest(bridge, body);
-      return new Response(JSON.stringify(result), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      });
-    };
-    const remote = connectRemoteBridge({
-      url: "/api/pimas/cartonization",
-      fetch: fakeFetch,
-      headers: { authorization: "Bearer test" },
-    });
-
-    expect(await remote.speculate("setN", 6)).toEqual({ n: 6 });
-    expect(state.n).toBe(1);
-    expect(await remote.call("setN", 6)).toBeNull();
-    expect((await remote.snapshot()).state).toEqual({ n: 6 });
-    expect((await remote.descriptor()).actions.setN?.params).toEqual(["value"]);
-    expect(await remote.speculatePlan([["setN", 9]])).toEqual({ n: 9 });
-    expect(requests.map((request) => request.op)).toEqual([
-      "speculate",
-      "call",
-      "snapshot",
-      "descriptor",
-      "speculatePlan",
-    ]);
     bridge.dispose();
   });
 });

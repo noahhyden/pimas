@@ -10,7 +10,7 @@ import {
   onCleanup,
   createRoot,
   subscribe,
-} from "pimas";
+} from "../src/reactive/index.js";
 
 describe("createSignal", () => {
   it("reads and writes a value", () => {

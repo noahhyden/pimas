@@ -1,19 +1,19 @@
 /** WebMCP projection tested against a mock host matching the spec. */
 import { describe, it, expect } from "vitest";
-import { createStore } from "pimas/store";
-import { createAgentBridge } from "pimas/agent";
+import { createSignal, createMemo } from "../src/reactive/index.js";
+import { createStore } from "../src/store/index.js";
+import { createAgentBridge } from "../src/agent/index.js";
 import {
   toWebMCP,
   detectModelContext,
   type ModelContext,
   type WebMCPTool,
-  type WebMCPRegisterOptions,
-} from "pimas/agent/webmcp";
+} from "../src/agent/webmcp.js";
 
 function mockHost() {
   const tools = new Map<string, WebMCPTool>();
   const host: ModelContext = {
-    registerTool(tool: WebMCPTool, options?: WebMCPRegisterOptions) {
+    registerTool(tool: WebMCPTool, options?: { signal?: AbortSignal }) {
       tools.set(tool.name, tool);
       options?.signal?.addEventListener("abort", () => tools.delete(tool.name), { once: true });
     },
@@ -71,11 +71,6 @@ describe("toWebMCP — project the bridge onto the WebMCP tool API (issue #13)",
     // it's a LIVE read — reflects a later change made through another tool
     await tools.get("setN")!.execute({ value: 9 });
     expect(await callTool(getN)).toBe(9);
-
-    // readTools:false suppresses them.
-    const { host: h2, tools: t2 } = mockHost();
-    toWebMCP(bridge, { provider: h2, readTools: false });
-    expect([...t2.keys()].some((k) => k.startsWith("get_"))).toBe(false);
   });
 
   it("namespaces tool names to avoid cross-island collisions", () => {
@@ -133,13 +128,26 @@ describe("toWebMCP — project the bridge onto the WebMCP tool API (issue #13)",
     expect(() => JSON.parse(r.content[0]!.text)).not.toThrow(); // a reference agent can parse it
   });
 
-  it("simulateTools:false yields a poke-and-rescrape baseline (the A/B switch)", () => {
-    const { bridge } = build();
+  it("simulate_sweep runs each point as an independent top-level speculation (no nesting)", async () => {
+    const [power, setPower] = createSignal(250);
+    const output = createMemo(() => power() * 4);
+    const bridge = createAgentBridge((r) => {
+      r.expose("output", () => output());
+      r.action("setPower", (v) => setPower(v as number));
+    });
     const { host, tools } = mockHost();
-    toWebMCP(bridge, { provider: host, simulateTools: false });
-    expect([...tools.keys()].some((k) => k.startsWith("simulate_"))).toBe(false);
-    expect(tools.has("setN")).toBe(true); // actions + reads still present
-    expect(tools.has("get_n")).toBe(true);
+    toWebMCP(bridge, { provider: host });
+    const sweep = tools.get("simulate_sweep")!;
+
+    expect(await callTool(sweep, { action: "setPower", argsList: [[250], [500], [1000]] })).toEqual([
+      { output: 1000 },
+      { output: 2000 },
+      { output: 4000 },
+    ]);
+    expect(await callTool(sweep, { action: "setPower", argsList: [[1], [2]] })).toEqual([{ output: 4 }, { output: 8 }]);
+    expect(power()).toBe(250);
+    expect(bridge.history()).toEqual([]);
+    bridge.dispose();
   });
 
   it("returns null host under Node and throws without a provider", () => {

@@ -1,11 +1,6 @@
 import { defineConfig } from "vitest/config";
-// @ts-expect-error untyped .mjs shared with scripts/size.mjs
-import { viteAliases } from "./scripts/aliases.mjs";
 
 export default defineConfig({
-  resolve: {
-    alias: viteAliases as { find: string | RegExp; replacement: string }[],
-  },
   test: {
     environment: "happy-dom",
     exclude: ["**/node_modules/**", "**/dist/**", "**/.claude/**"],

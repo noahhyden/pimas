@@ -13,14 +13,9 @@ export interface WebMCPTool {
   annotations?: { readOnlyHint?: boolean };
 }
 
-/** Options accepted by `registerTool` (spec's `ModelContextRegisterToolOptions`). */
-export interface WebMCPRegisterOptions {
-  signal?: AbortSignal;
-}
-
 /** The minimal WebMCP host surface the projection needs. */
 export interface ModelContext {
-  registerTool(tool: WebMCPTool, options?: WebMCPRegisterOptions): Promise<void> | void;
+  registerTool(tool: WebMCPTool, options?: { signal?: AbortSignal }): Promise<void> | void;
 }
 
 export interface WebMCPOptions {
@@ -28,10 +23,6 @@ export interface WebMCPOptions {
   provider?: ModelContext;
   /** Prefix tool names so multiple bridges don't collide. */
   namespace?: string;
-  /** Also register a `get_<name>` read tool per exposed value. Default true. */
-  readTools?: boolean;
-  /** Also register `simulate_<name>`, `simulate_plan` and `simulate_sweep` (predict without committing). Default true. */
-  simulateTools?: boolean;
   /** Abort this to tear down all registrations (else use the returned disposer). */
   signal?: AbortSignal;
 }
@@ -56,9 +47,8 @@ export function toWebMCP(bridge: AgentBridge, opts: WebMCPOptions = {}): () => v
   }
   const controller = new AbortController();
   if (opts.signal) opts.signal.addEventListener("abort", () => controller.abort(), { once: true });
-  const regOpts: WebMCPRegisterOptions = { signal: controller.signal };
   const tools = toolsForDescriptor(bridge, bridge.descriptor(), opts);
-  for (const tool of tools.values()) host.registerTool(tool, regOpts);
+  for (const tool of tools.values()) host.registerTool(tool, { signal: controller.signal });
 
   return () => controller.abort();
 }

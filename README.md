@@ -68,7 +68,7 @@ You need it when the model is a **graph of derived values**, not one reducer:
 - nested store fields, each independently subscribed
 - memos that fan in (a diamond recomputes once, glitch-free)
 - a multi-step plan in **one** shadow (`speculatePlan`) so A-then-B is not two separate previews that reset
-- a sensitivity sweep (`speculateSweep`) that never touches live state
+- a sensitivity sweep (`simulate_sweep`) that never touches live state
 - the same surface projected as agent tools, including `simulate_*`
 
 Memos must be pure. If a memo writes to the network, speculation will not save you — and should not. Put I/O in `action`s; put math in memos.
@@ -79,19 +79,22 @@ Memos must be pure. If a memo writes to the network, speculation will not save y
 | --- | --- |
 | `pimas-ui` | `createSignal` / `createMemo` / `createEffect` / `batch` / `speculate` / `subscribe` / `createRoot` / `catchError` |
 | `pimas-ui/store` | `createStore`, `produce`, `reconcile` |
-| `pimas-ui/agent` | `createModel`, `createAgentBridge` — `snapshot`, `subscribe`, `call`, `explain`, `speculate`, `speculatePlan`, `speculateSweep`, `commitPlan`, `graph` |
+| `pimas-ui/agent` | `createModel`, `createAgentBridge` — `snapshot`, `subscribe`, `call`, `explain`, `speculate`, `speculatePlan`, `commitPlan`, `graph` |
 | `pimas-ui/agent/webmcp` | `toWebMCP(bridge)` — actions + `simulate_*` tools |
-| `pimas-ui/agent/page` | `installPageAgent`, `connectRemoteBridge`, `handleBridgeRequest` — `window.__pimas` without WebMCP |
-| `pimas-ui/react` | `usePimas(read)`, `useSnapshot(bridge)` — React 18+, optional peer |
+| `pimas-ui/agent/page` | `installPageAgent` — `window.__pimas`, with or without WebMCP |
+| `pimas-ui/react` | `usePimas(read)` — React 18+, optional peer |
 
 Zero runtime dependencies. React is an optional peer, pulled in only if you import `pimas-ui/react`.
 
-A page agent works with or without `document.modelContext`. Host `handleBridgeRequest` on one POST; the browser installs the same surface:
+A page agent works with or without `document.modelContext`:
 
 ```ts
-import { connectRemoteBridge, installPageAgent } from "pimas-ui/agent/page";
+import { installPageAgent } from "pimas-ui/agent/page";
 
-void installPageAgent(connectRemoteBridge({ url: "/api/pimas" }), { namespace: "model" });
+installPageAgent(model.bridge, { namespace: "model" });
 // window.__pimas.model.speculate(action, ...args)  — live state unchanged
 // window.__pimas.model.call(action, ...args)       — commit
 ```
+
+`0.3` removed the HTTP remote bridge. To drive a bridge across a network, POST to your own
+endpoint and call the bridge method there — it was three lines of `fetch` wearing a type.

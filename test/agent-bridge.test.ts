@@ -1,8 +1,8 @@
 /** Agent bridge: subscribe pushes deltas for exactly the changed name, call runs actions, via the public core. */
 import { describe, it, expect, vi } from "vitest";
-import { createSignal, createMemo } from "pimas";
-import { createStore, onStoreWrite } from "pimas/store";
-import { createAgentBridge, type AgentEvent } from "pimas/agent";
+import { createSignal, createMemo } from "../src/reactive/index.js";
+import { createStore, onStoreWrite } from "../src/store/index.js";
+import { createAgentBridge, type AgentEvent } from "../src/agent/index.js";
 
 describe("agent bridge — L1 subscribe (issue #13)", () => {
   it("pushes an initial snapshot then a delta when exposed state changes", () => {
@@ -165,22 +165,7 @@ describe("agent bridge — L1 subscribe (issue #13)", () => {
     bridge.dispose();
   });
 
-  it("speculateSweep predicts state at each point of a sensitivity sweep (L3)", () => {
-    const [power, setPower] = createSignal(250);
-    const output = createMemo(() => power() * 4); // some derived model
-    const bridge = createAgentBridge((r) => {
-      r.expose("output", () => output());
-      r.action("setPower", (v) => setPower(v as number));
-    });
-
-    const sweep = bridge.speculateSweep("setPower", [[250], [500], [1000]]);
-    expect(sweep).toEqual([{ output: 1000 }, { output: 2000 }, { output: 4000 }]);
-
-    expect(power()).toBe(250); // real signal untouched
-    bridge.dispose();
-  });
-
-  it("plan/sweep are pure what-ifs — they record NO L2 causal history", () => {
+  it("plan is a pure what-if — they record NO L2 causal history", () => {
     const [s, set] = createStore({ rows: [{ id: "a", n: 1 }] });
     const total = createMemo(() => s.rows.reduce((x, r) => x + r.n, 0));
     const bridge = createAgentBridge(
@@ -192,7 +177,6 @@ describe("agent bridge — L1 subscribe (issue #13)", () => {
     );
 
     bridge.speculatePlan([["setN", 0, 9]]);
-    bridge.speculateSweep("setN", [[0, 5], [0, 7]]);
     expect(bridge.explain()).toBeNull(); // no action committed → no provenance
     expect(bridge.history()).toEqual([]);
 
