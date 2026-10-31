@@ -146,8 +146,7 @@ describe("batch", () => {
 
 describe("scheduler seam", () => {
   it("flushes synchronously by default", () => {
-    // The regression lock: a write's effects must be observable the instant the
-    // write returns (renderToString + post-write DOM reads depend on this).
+    // Regression lock: effects are observable the instant a write returns.
     const [n, setN] = createSignal(0);
     const seen: number[] = [];
     createRoot(() => createEffect(() => seen.push(n())));

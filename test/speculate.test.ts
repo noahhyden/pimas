@@ -1,8 +1,4 @@
-/**
- * L3 what-if oracle (issue #13). `speculate(apply, read)` evaluates hypothetical
- * writes against a SHADOW of the graph — reads/memos see the hypothetical, the
- * real graph is never mutated, no effects fire, and it rolls back on exit.
- */
+/** `speculate(apply, read)` evaluates hypothetical writes against a shadow graph and rolls back on exit. */
 import { describe, it, expect, vi } from "vitest";
 import { createSignal, createMemo, createEffect, createRoot, speculate } from "pimas";
 import { createStore } from "pimas/store";
@@ -66,8 +62,7 @@ describe("speculate — L3 what-if oracle (issue #13)", () => {
     expect(speculate(() => setMult(10), () => total())).toBe(50);
     expect(total()).toBe(5); // rolled back
 
-    // Hypothetical store EDIT: the write lands in the rollback-scoped scratch
-    // (copy-on-write), never in the raw object.
+    // Hypothetical store EDIT lands in the rollback-scoped scratch, never the raw object.
     const predicted = speculate(() => set("rows", 0, "qty", 100), () => total());
     expect(predicted).toBe(103); // (100 + 3) * 1
     expect(s.rows[0]!.qty).toBe(2); // real store untouched
