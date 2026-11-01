@@ -8,11 +8,13 @@ live model does not change, and the number you get is the number a real commit w
 
 No renderer, no JSX — your UI is React, or nothing. (Pin `pimas-ui@0.1.2` for the old renderer.)
 
+## Install
+
 ```sh
 npm install pimas-ui
 ```
 
-## Afternoon, in a React app
+## Quick start
 
 ```tsx
 import { createMemo } from "pimas-ui";
@@ -53,9 +55,7 @@ function Checkout({ draftQty }: { draftQty: number }) {
 }
 ```
 
-`usePimas(() => model.cart.items[0].qty)` re-renders only when that one field changes, and
-`toWebMCP(model.bridge)` hands the same surface to an agent as `setQty` plus `simulate_setQty`.
-The preview UI and the agent call the same function, so they cannot disagree.
+`usePimas(() => model.cart.items[0].qty)` re-renders only when that one field changes.
 
 ## Why not a reducer
 
@@ -66,6 +66,22 @@ model is a **graph of derived values**: store fields subscribed independently, m
 
 Memos must be pure — if a memo writes to the network, speculation will not save you. I/O in
 `action`s, math in memos.
+
+## Agents
+
+The bridge behind that preview is the same surface an agent gets. `toWebMCP(model.bridge)` projects
+it onto `document.modelContext` as `setQty` alongside `simulate_setQty`, so the preview UI and the
+agent call the same function and cannot disagree about the answer.
+
+Where WebMCP is not available, `installPageAgent` puts the same surface on `window`:
+
+```ts
+import { installPageAgent } from "pimas-ui/agent/page";
+
+installPageAgent(model.bridge, { namespace: "model" });
+// window.__pimas.model.speculate(action, ...args)  — live state unchanged
+// window.__pimas.model.call(action, ...args)       — commit
+```
 
 ## API
 
@@ -81,20 +97,10 @@ Memos must be pure — if a memo writes to the network, speculation will not sav
 `getListener` and `speculationScratch` are the seam the store is built on — you need them only to
 write your own store-like primitive. Zero runtime dependencies; React is an optional peer.
 
-**Stability.** Pre-1.0, solo-maintained — pin exact versions. Within `0.3.x` the surface above is
-additive; breaking changes bump `0.x.0`. Releases carry signed npm provenance.
+## Stability
 
-## Page agent
-
-Works with or without `document.modelContext`:
-
-```ts
-import { installPageAgent } from "pimas-ui/agent/page";
-
-installPageAgent(model.bridge, { namespace: "model" });
-// window.__pimas.model.speculate(action, ...args)  — live state unchanged
-// window.__pimas.model.call(action, ...args)       — commit
-```
+Pre-1.0, solo-maintained — pin exact versions. Within `0.3.x` the surface above is additive;
+breaking changes bump `0.x.0`. Releases carry signed npm provenance.
 
 ## License
 

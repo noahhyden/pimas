@@ -5,6 +5,10 @@ Pre-1.0: minor versions may carry breaking changes.
 ## [Unreleased]
 
 ### Changed
+- README restructured: what → install → quick start → why → agents → API → stability
+  → licence. The agent story was spread across three places and is now one section,
+  `Stability` was bold inline text inside `## API` and is now its own heading, and the
+  quickstart is no longer titled "Afternoon, in a React app".
 - **License is Apache 2.0**, was MIT. Published versions up to and including `0.3.0`
   remain MIT; the change takes effect from the next release.
 - `NOTICE` and `TRADEMARKS.md` (both new, both shipped in the tarball) reserve the
