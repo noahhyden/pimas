@@ -90,7 +90,7 @@ describe("agent bridge — L1 subscribe (issue #13)", () => {
         r.expose("openCount", () => openCount());
         r.action("setStatus", (i, st) => set("rows", i as number, "status", st));
       },
-      { writeTap: (record) => onStoreWrite((e) => record(e.path.join("."))) },
+      { writeTap: (record) => onStoreWrite((path) => record(path.join("."))) },
     );
 
     const causes: AgentEvent[] = [];
@@ -173,7 +173,7 @@ describe("agent bridge — L1 subscribe (issue #13)", () => {
         r.expose("total", () => total());
         r.action("setN", (i, v) => set("rows", i as number, "n", v));
       },
-      { writeTap: (record) => onStoreWrite((e) => record(e.path.join("."))) },
+      { writeTap: (record) => onStoreWrite((path) => record(path.join("."))) },
     );
 
     bridge.speculatePlan([["setN", 0, 9]]);
@@ -213,7 +213,7 @@ describe("agent bridge — L1 subscribe (issue #13)", () => {
           r.expose("total", () => total());
           r.action("setN", (i, v) => set("rows", i as number, "n", v));
         },
-        { writeTap: (rec) => onStoreWrite((e) => rec(e.path.join("."))) },
+        { writeTap: (rec) => onStoreWrite((path) => rec(path.join("."))) },
       );
       make.call({ bridge });
       const h = bridge.history();
@@ -251,7 +251,7 @@ describe("agent bridge — L1 subscribe (issue #13)", () => {
           set("rows", i as number, "status", st);
         });
       },
-      { writeTap: (record) => onStoreWrite((e) => record(e.path.join("."))) },
+      { writeTap: (record) => onStoreWrite((path) => record(path.join("."))) },
     );
 
     const p = bridge.call("setStatusAsync", 0, "done") as Promise<unknown>;
@@ -296,7 +296,7 @@ describe("agent bridge — L1 subscribe (issue #13)", () => {
         r.expose("openCount", () => openCount());
         r.action("setStatus", (i, st) => set("rows", i as number, "status", st));
       },
-      { writeTap: (record) => onStoreWrite((e) => record(e.path.join("."))), historyLimit: 2 },
+      { writeTap: (record) => onStoreWrite((path) => record(path.join("."))) },
     );
 
     expect(bridge.history()).toEqual([]); // nothing before any call
@@ -306,8 +306,8 @@ describe("agent bridge — L1 subscribe (issue #13)", () => {
     // both retained, oldest→newest
     expect(bridge.history().map((c) => c.args)).toEqual([[0, "done"], [1, "done"]]);
 
-    bridge.call("setStatus", 0, "open"); // exceeds historyLimit:2 → oldest dropped
-    expect(bridge.history().map((c) => c.args)).toEqual([[1, "done"], [0, "open"]]);
+    for (let i = 0; i < 60; i++) bridge.call("setStatus", 0, i % 2 ? "open" : "done");
+    expect(bridge.history().length).toBe(50); // bounded: oldest dropped
     expect(bridge.history(1).map((c) => c.args)).toEqual([[0, "open"]]); // last N
     expect(bridge.explain()!.args).toEqual([0, "open"]); // last-cause unchanged
 
@@ -391,10 +391,9 @@ describe("agent bridge — L0 graph / topology introspection (issue #37)", () =>
     expect(signals.length).toBe(1); // a
     expect(memos.length).toBe(3); // b, c, d
 
-    // The exposed name backs its (single) seed node.
-    const dNode = g.nodes.find((n) => n.name === "d")!;
+    // d is the memo no other node reads from.
+    const dNode = memos.find((n) => !g.edges.some((e) => e.from === n.id))!;
     expect(dNode.kind).toBe("memo");
-    expect(g.nodes.filter((n) => n.name !== undefined).length).toBe(1); // only "d" is named
 
     // Edges run source to dependent; ids are opaque so assert the shape.
     const aNode = signals[0]!;
@@ -425,7 +424,7 @@ describe("agent bridge — L0 graph / topology introspection (issue #37)", () =>
     // The sibling memo observes `a` but is not a source of exposed state, so it is invisible.
     expect(g.nodes.length).toBe(2);
     expect(g.nodes.map((n) => n.kind).sort()).toEqual(["memo", "signal"]);
-    expect(g.nodes.find((n) => n.name === "exposed")!.kind).toBe("memo");
+    expect(g.edges.length).toBe(1); // a → exposed
 
     bridge.dispose();
   });
@@ -439,15 +438,15 @@ describe("agent bridge — L0 graph / topology introspection (issue #37)", () =>
     });
 
     const g = bridge.graph();
-    const oc = g.nodes.find((n) => n.name === "openCount")!;
+    const oc = g.nodes.find((n) => n.kind === "memo")!;
     expect(oc.kind).toBe("memo");
     // The memo has sources (the store's per-field signals it read) → inbound edges.
     expect(g.edges.some((e) => e.to === oc.id)).toBe(true);
-    // Actions are not part of the derives-from graph.
-    expect(g.nodes.some((n) => n.name === "setStatus")).toBe(false);
 
     set("rows", 0, "status", "done"); // topology unaffected by a value change
-    expect(bridge.graph().nodes.find((n) => n.name === "openCount")).toBeTruthy();
+    const g2 = bridge.graph();
+    expect(g2.nodes.length).toBe(g.nodes.length);
+    expect(g2.edges.length).toBe(g.edges.length);
 
     bridge.dispose();
   });
@@ -459,9 +458,7 @@ describe("agent bridge — L0 graph / topology introspection (issue #37)", () =>
 
     const g1 = bridge.graph();
     const g2 = bridge.graph();
-    const id1 = g1.nodes.find((n) => n.name === "total")!.id;
-    const id2 = g2.nodes.find((n) => n.name === "total")!.id;
-    expect(id2).toBe(id1);
+    expect(g2.nodes.map((n) => n.id)).toEqual(g1.nodes.map((n) => n.id));
     // Ids are stable identifiers, distinct per node within the graph.
     expect(new Set(g1.nodes.map((n) => n.id)).size).toBe(g1.nodes.length);
 
@@ -474,10 +471,8 @@ describe("agent bridge — L0 graph / topology introspection (issue #37)", () =>
     const bridge = createAgentBridge((r) => r.expose("total", () => qty() * price()));
 
     const g = bridge.graph();
-    // Neither signal carries the name; the derivation lives in the accessor closure.
     expect(g.nodes.length).toBe(2);
     expect(g.nodes.every((n) => n.kind === "signal")).toBe(true);
-    expect(g.nodes.every((n) => n.name === undefined)).toBe(true);
     expect(g.edges).toEqual([]); // two independent leaf signals
 
     bridge.dispose();

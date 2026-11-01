@@ -36,7 +36,7 @@ describe("page agent", () => {
 
     expect(root?.cartonization).toBe(installed);
     expect(root?.cartonization?.tools).toBeInstanceOf(Map);
-    const simulate = installed.tools.get("simulate_setN")!;
+    const simulate = installed.tools.get("cartonization.simulate_setN")!;
     expect(simulate.annotations).toEqual({ readOnlyHint: true });
 
     expect(await toolValue(simulate, { value: 8 })).toEqual({ n: 8 });
@@ -49,10 +49,10 @@ describe("page agent", () => {
     bridge.dispose();
   });
 
-  it("installs un-namespaced at window.__pimas", () => {
+  it("installs un-namespaced at window.__pimas.default", () => {
     const { bridge } = build();
     const installed = installPageAgent(bridge);
-    expect((globalThis as { __pimas?: unknown }).__pimas).toBe(installed);
+    expect((globalThis as { __pimas?: Record<string, unknown> }).__pimas?.default).toBe(installed);
     expect(installed.tools.has("setN")).toBe(true);
     bridge.dispose();
   });

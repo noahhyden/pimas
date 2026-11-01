@@ -25,6 +25,8 @@ export interface WebMCPOptions {
   namespace?: string;
   /** Abort this to tear down all registrations (else use the returned disposer). */
   signal?: AbortSignal;
+  /** Prebuilt tool map, so a caller that already projected the descriptor doesn't build it twice. */
+  tools?: Map<string, WebMCPTool>;
 }
 
 /** Best-effort detection of the browser WebMCP host. Returns null under Node/SSR. */
@@ -47,7 +49,7 @@ export function toWebMCP(bridge: AgentBridge, opts: WebMCPOptions = {}): () => v
   }
   const controller = new AbortController();
   if (opts.signal) opts.signal.addEventListener("abort", () => controller.abort(), { once: true });
-  const tools = toolsForDescriptor(bridge, bridge.descriptor(), opts);
+  const tools = opts.tools ?? toolsForDescriptor(bridge, bridge.descriptor(), opts);
   for (const tool of tools.values()) host.registerTool(tool, { signal: controller.signal });
 
   return () => controller.abort();

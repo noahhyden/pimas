@@ -99,7 +99,7 @@ describe("reconcile — store contract", () => {
   it("emits one provenance write with the reconcile path", () => {
     const [, set] = createStore({ rows: [{ id: "a", v: 1 }] });
     const paths: unknown[] = [];
-    const off = onStoreWrite((e) => paths.push(e.path));
+    const off = onStoreWrite((path) => paths.push(path));
     set("rows", reconcile([{ id: "a", v: 2 }]));
     expect(paths).toEqual([["rows"]]);
     off();

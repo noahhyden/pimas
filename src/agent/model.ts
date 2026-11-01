@@ -9,7 +9,7 @@ export type Model<T extends object> = T & {
 };
 
 const defaultWriteTap: AgentOptions["writeTap"] = (record) =>
-  onStoreWrite((e) => record(e.path.map(String).join(".")));
+  onStoreWrite((path) => record(path.map(String).join(".")));
 
 /** Build a model; `setup` runs inside the bridge root, so `expose` / `action` there and return what the caller reads. */
 export function createModel<T extends object>(
