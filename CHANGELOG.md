@@ -7,9 +7,11 @@ Pre-1.0: minor versions may carry breaking changes.
 ### Changed
 - **License is Apache 2.0**, was MIT. Published versions up to and including `0.3.0`
   remain MIT; the change takes effect from the next release.
-- `NOTICE` (new, and shipped in the tarball) reserves the names "pimas" / "pimas-ui",
-  the personal name Noah Hyden, and any logo as trademarks. Apache 2.0 § 6 grants no
-  rights in them. Nominative reference — "works with pimas" — is still fine.
+- `NOTICE` and `TRADEMARKS.md` (both new, both shipped in the tarball) reserve the
+  names "pimas" / "pimas-ui", the name Noah Hyden, and the project's logos as
+  trademarks. Apache 2.0 § 6 grants no rights in them. Nominative use — "works with
+  pimas", "a fork of pimas" — stays fine; naming your own product after it does not.
+  Same wording as the sibling `erbina` repo.
 
 ### Removed
 - `docs/0.3-react-dropin-SPEC.md` — a work order for shipping 0.3, which shipped. It

@@ -11,8 +11,8 @@ if (deps.length) {
   );
 }
 
-if (JSON.stringify(pkg.files) !== JSON.stringify(["dist", "src", "NOTICE"])) {
-  problems.push(`"files" must be ["dist","src","NOTICE"] — found ${JSON.stringify(pkg.files)}`);
+if (JSON.stringify(pkg.files) !== JSON.stringify(["dist", "src", "NOTICE", "TRADEMARKS.md"])) {
+  problems.push(`"files" must be ["dist","src","NOTICE","TRADEMARKS.md"] — found ${JSON.stringify(pkg.files)}`);
 }
 
 if (pkg.license !== "Apache-2.0") {
@@ -27,4 +27,4 @@ if (problems.length) {
   console.error("package.json supply-chain guard FAILED:\n - " + problems.join("\n - "));
   process.exit(1);
 }
-console.log("package.json guard OK — zero runtime deps, files=[dist,src,NOTICE], Apache-2.0, react optional peer.");
+console.log("package.json guard OK — zero runtime deps, files=[dist,src,NOTICE,TRADEMARKS.md], Apache-2.0, react optional peer.");

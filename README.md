@@ -101,9 +101,12 @@ endpoint and call the bridge method there — it was three lines of `fetch` wear
 
 ## License
 
-[Apache 2.0](LICENSE). Zero runtime dependencies.
+[Apache License 2.0](LICENSE). Zero runtime dependencies.
 
-The names **pimas** / **pimas-ui**, the personal name **Noah Hyden**, and any pimas logo
-are trademarks of Noah Hyden and are **not** covered by that licence — see [NOTICE](NOTICE).
-Say your project uses or is compatible with pimas all you like; do not name your own
-product after it or imply endorsement.
+The names **pimas** and **pimas-ui**, the name **Noah Hyden**, and the project's
+logos are trademarks and are *not* covered by that licence — see
+[TRADEMARKS.md](TRADEMARKS.md) for what's fine without asking, and
+[NOTICE](NOTICE). Fork the code freely; just give your fork its own name.
+
+Releases published before the move to Apache 2.0 (`pimas-ui` up to `0.3.0`)
+keep the MIT terms they shipped under.
