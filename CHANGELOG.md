@@ -2,6 +2,33 @@
 
 Pre-1.0: minor versions may carry breaking changes.
 
+## [0.5.0] — 2026-11-01
+
+### Changed
+- **`getListener` is now `isTracking`, returning `boolean`.** It was typed
+  `(): unknown` with a doc comment telling you to treat it as truthy/falsy, and its
+  only caller in the tree did exactly that. A boolean in a costume. The rename is
+  deliberate and there is no compatibility alias.
+- **`PageAgent` is `{ bridge, tools }`.** It used to also carry `snapshot`,
+  `speculate` and `call` as bound copies of methods on the `bridge` it hands you in
+  the same object, so `pageAgent.call === pageAgent.bridge.call`. Reach through
+  `bridge`: `window.__pimas.model.bridge.call(...)`.
+- `speculate(name, ...args)` is now implemented as `speculatePlan([[name, ...args]])`
+  — it was always that special case, run down a second copy of the same shadow-graph
+  path. Behaviour is unchanged, including the eager throw on an unknown action name
+  before any shadow is set up.
+- `explain()` is now `history(1)[0] ?? null`, one implementation instead of two
+  readings of the same log. Unchanged behaviour, including `null` before any call.
+- `commitPlan` returns `snapshot().state` rather than rebuilding the same object.
+- The `agent: page` size budget measures `src/agent/index.js`, the entry a consumer
+  can actually import, instead of the `src/agent/page.js` deep path that stopped
+  being public in 0.4.0.
+
+### Added
+- **`bridge.read(name)`** — the current value of one exposed name, or `undefined`.
+  The WebMCP `get_<name>` tools now use it instead of calling `snapshot()` and
+  indexing one key, which rebuilt the whole state map once per field read.
+
 ## [0.4.0] — 2026-11-01
 
 ### Changed

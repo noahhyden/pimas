@@ -1,5 +1,5 @@
 /** Nested reactive store: a deep proxy tracking reads per field, with `produce` and `reconcile` updaters. */
-import { createSignal, batch, getListener, speculationScratch } from "../reactive/index.js";
+import { createSignal, batch, isTracking, speculationScratch } from "../reactive/index.js";
 
 const $RAW = Symbol("pimas.store.raw");
 const $NODES = Symbol("pimas.store.nodes");
@@ -51,7 +51,7 @@ function signalFor(nodes: Nodes, key: PropertyKey) {
 
 /** Subscribe the current computation to `key`'s ping signal, only if one is listening — see AGENTS.d/210-a-store-read-outside-a-reactive-scope-creates-no-signal.md */
 function track(target: object, key: PropertyKey): void {
-  if (getListener()) signalFor(getNodes(target), key)[0]();
+  if (isTracking()) signalFor(getNodes(target), key)[0]();
 }
 
 /** Force-notify subscribers of `key` (monotonic bump — always changes). */

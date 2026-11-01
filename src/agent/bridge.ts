@@ -60,6 +60,8 @@ export interface AgentOptions {
 export interface AgentBridge {
   /** One-shot: current value of every exposed name + the action names. */
   snapshot(): { state: Record<string, unknown>; actions: string[] };
+  /** Current value of one exposed name, or undefined if the name is not exposed. */
+  read(name: string): unknown;
   /** Agent side: replay the current snapshot, then receive a delta on each change. */
   subscribe(listener: (e: AgentEvent) => void): () => void;
   /** A machine-readable description of exposed state + actions (the wire contract). */
@@ -163,11 +165,12 @@ export function createAgentBridge(setup: (r: AgentRegistrar) => void, opts: Agen
     };
   };
 
-  return {
+  const bridge: AgentBridge = {
     snapshot: () => ({
       state: Object.fromEntries(latest),
       actions: [...actions.keys()],
     }),
+    read: (name) => latest.get(name),
     descriptor: () => {
       const state: AgentDescriptor["state"] = {};
       for (const [name, value] of latest) state[name] = { value, ...stateMeta.get(name) };
@@ -208,11 +211,11 @@ export function createAgentBridge(setup: (r: AgentRegistrar) => void, opts: Agen
       prov.record();
       return result;
     },
-    explain: () => causeLog.at(-1) ?? null,
+    explain: () => bridge.history(1)[0] ?? null,
     history: (limit) => (limit == null ? causeLog.slice() : causeLog.slice(-limit)),
     speculate(actionName, ...args) {
-      const fn = requireAction(actionName);
-      return coreSpeculate(() => void fn(...args), readAllExposed);
+      requireAction(actionName);
+      return bridge.speculatePlan([[actionName, ...args]]);
     },
     speculatePlan(steps) {
       // One shadow graph: writes compose, same-field writes are last-write-wins.
@@ -231,8 +234,9 @@ export function createAgentBridge(setup: (r: AgentRegistrar) => void, opts: Agen
         throw e;
       }
       prov.record();
-      return Object.fromEntries(latest);
+      return bridge.snapshot().state;
     },
     dispose,
   };
+  return bridge;
 }

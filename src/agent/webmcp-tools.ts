@@ -50,7 +50,7 @@ export function toolsForDescriptor(
       description: state.description ?? `Read the current value of "${name}".`,
       inputSchema: { type: "object", properties: {} },
       annotations: { readOnlyHint: true },
-      execute: async () => envelope(bridge.snapshot().state[name]),
+      execute: async () => envelope(bridge.read(name)),
     };
     tools.set(tool.name, tool);
   }

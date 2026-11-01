@@ -498,3 +498,18 @@ describe("agent bridge — L0 graph / topology introspection (issue #37)", () =>
     bridge.dispose();
   });
 });
+
+describe("agent bridge — read", () => {
+  it("returns one exposed value, tracks updates, and is undefined for an unknown name", () => {
+    const [n, setN] = createSignal(1);
+    const bridge = createAgentBridge((r) => {
+      r.expose("count", () => n());
+      r.action("bump", () => setN(5));
+    });
+    expect(bridge.read("count")).toBe(1);
+    bridge.call("bump");
+    expect(bridge.read("count")).toBe(5);
+    expect(bridge.read("nope")).toBeUndefined();
+    bridge.dispose();
+  });
+});

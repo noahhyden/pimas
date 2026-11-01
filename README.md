@@ -79,8 +79,8 @@ Where WebMCP is not available, `installPageAgent` puts the same surface on `wind
 import { installPageAgent } from "pimas-ui/agent";
 
 installPageAgent(model.bridge, { namespace: "model" });
-// window.__pimas.model.speculate(action, ...args)  — live state unchanged
-// window.__pimas.model.call(action, ...args)       — commit
+// window.__pimas.model.bridge.speculate(action, ...args)  — live state unchanged
+// window.__pimas.model.bridge.call(action, ...args)       — commit
 // without a namespace it lands at window.__pimas.default
 ```
 
@@ -88,18 +88,18 @@ installPageAgent(model.bridge, { namespace: "model" });
 
 | Import | Exports |
 | --- | --- |
-| `pimas-ui` | `createSignal` `createMemo` `createEffect` `batch` `untrack` `onCleanup` `createRoot` `subscribe` `catchError` `speculate` `setScheduler` `flushSync` `getListener` `speculationScratch` |
+| `pimas-ui` | `createSignal` `createMemo` `createEffect` `batch` `untrack` `onCleanup` `createRoot` `subscribe` `catchError` `speculate` `setScheduler` `flushSync` `isTracking` `speculationScratch` |
 | `pimas-ui/store` | `createStore` `produce` `reconcile` `unwrap` `onStoreWrite` |
-| `pimas-ui/agent` | `createModel` `createAgentBridge` — the bridge carries `snapshot` `subscribe` `descriptor` `call` `explain` `history` `speculate` `speculatePlan` `commitPlan` `graph` `dispose` |
+| `pimas-ui/agent` | `createModel` `createAgentBridge` — the bridge carries `snapshot` `read` `subscribe` `descriptor` `call` `explain` `history` `speculate` `speculatePlan` `commitPlan` `graph` `dispose` |
 | `pimas-ui/agent` | `toWebMCP` `detectModelContext` — actions plus `get_*` and `simulate_*` tools; `installPageAgent` — sets `window.__pimas`, with or without WebMCP |
 | `pimas-ui/react` | `usePimas` — React 18+, optional peer |
 
-`getListener` and `speculationScratch` are the seam the store is built on — you need them only to
+`isTracking` and `speculationScratch` are the seam the store is built on — you need them only to
 write your own store-like primitive. Zero runtime dependencies; React is an optional peer.
 
 ## Stability
 
-Pre-1.0, solo-maintained — pin exact versions. Within `0.4.x` the surface above is additive;
+Pre-1.0, solo-maintained — pin exact versions. Within `0.5.x` the surface above is additive;
 breaking changes bump `0.x.0`. Releases carry signed npm provenance.
 
 ## License
