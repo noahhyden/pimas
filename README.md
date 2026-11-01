@@ -98,3 +98,12 @@ installPageAgent(model.bridge, { namespace: "model" });
 
 `0.3` removed the HTTP remote bridge. To drive a bridge across a network, POST to your own
 endpoint and call the bridge method there — it was three lines of `fetch` wearing a type.
+
+## License
+
+[Apache 2.0](LICENSE). Zero runtime dependencies.
+
+The names **pimas** / **pimas-ui**, the personal name **Noah Hyden**, and any pimas logo
+are trademarks of Noah Hyden and are **not** covered by that licence — see [NOTICE](NOTICE).
+Say your project uses or is compatible with pimas all you like; do not name your own
+product after it or imply endorsement.

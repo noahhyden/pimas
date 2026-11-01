@@ -3,7 +3,7 @@
   "version": "0.3.0",
   "description": "Exact what-if over a live reactive model. Drop it into React; an agent can simulate against the same graph without committing.",
   "type": "module",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "author": "Noah Hyden",
   "repository": {
     "type": "git",
@@ -41,7 +41,8 @@
   },
   "files": [
     "dist",
-    "src"
+    "src",
+    "NOTICE"
   ],
   "scripts": {
     "test": "vitest run",

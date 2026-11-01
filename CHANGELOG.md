@@ -2,6 +2,20 @@
 
 Pre-1.0: minor versions may carry breaking changes.
 
+## [Unreleased]
+
+### Changed
+- **License is Apache 2.0**, was MIT. Published versions up to and including `0.3.0`
+  remain MIT; the change takes effect from the next release.
+- `NOTICE` (new, and shipped in the tarball) reserves the names "pimas" / "pimas-ui",
+  the personal name Noah Hyden, and any logo as trademarks. Apache 2.0 § 6 grants no
+  rights in them. Nominative reference — "works with pimas" — is still fine.
+
+### Removed
+- `docs/0.3-react-dropin-SPEC.md` — a work order for shipping 0.3, which shipped. It
+  described `useSnapshot` as a feature, told the reader not to publish, and pointed at
+  a home directory that does not exist on this machine.
+
 ## [0.3.0] — 2026-10-31
 
 An audit release. Nothing was added. Every cut below had one caller, one
