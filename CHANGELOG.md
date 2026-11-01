@@ -4,6 +4,11 @@ Pre-1.0: minor versions may carry breaking changes.
 
 ## [Unreleased]
 
+### Added
+- A demo GIF at the top of the README: qty 2 → 7, the speculated total tracking to
+  £35.00 while the live total holds at £10.00, then a commit landing on exactly the
+  predicted number. Recorded from a real `createModel` + `speculate` run, not a mockup.
+
 ### Changed
 - **License is Apache 2.0**, was MIT. Published versions up to and including `0.3.0`
   remain MIT; the change takes effect from the next release.

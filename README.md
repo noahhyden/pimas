@@ -2,6 +2,8 @@
 
 A reactive model an agent (or a React preview UI) can **simulate against without committing**.
 
+![As qty goes from 2 to 7, "If you confirm" tracks `bridge.speculate` up to £35.00 while the live total stays £10.00 and no effects fire. Pressing Confirm makes the live total £35.00 — the prediction matched the commit exactly.](https://raw.githubusercontent.com/noahhyden/pimas/main/docs/demo.gif)
+
 Put derived state in signals, memos, and a store. `speculate` answers "what would `total` be if I
 set qty to 10?" by recomputing those memos against a shadow of the graph: effects do not run, the
 live model does not change, and the number you get is the number a real commit would produce.
