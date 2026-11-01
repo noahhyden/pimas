@@ -5,13 +5,23 @@ Pre-1.0: minor versions may carry breaking changes.
 ## [Unreleased]
 
 ### Changed
+- README restructured: what → install → quick start → why → agents → API → stability
+  → licence. The agent story was spread across three places and is now one section,
+  `Stability` was bold inline text inside `## API` and is now its own heading, and the
+  quickstart is no longer titled "Afternoon, in a React app".
 - **License is Apache 2.0**, was MIT. Published versions up to and including `0.3.0`
   remain MIT; the change takes effect from the next release.
 - `NOTICE` and `TRADEMARKS.md` (both new, both shipped in the tarball) reserve the
   names "pimas" / "pimas-ui", the name Noah Hyden, and the project's logos as
   trademarks. Apache 2.0 § 6 grants no rights in them. Nominative use — "works with
   pimas", "a fork of pimas" — stays fine; naming your own product after it does not.
-  Same wording as the sibling `erbina` repo.
+
+### Fixed
+- `AgentRegistrar.action` accepts a function with real parameter types. It took
+  `(...args: unknown[]) => unknown`, so the README's own example — `(id: string,
+  qty: number) => …` — failed to compile under `strict`. Widening is additive;
+  anything that compiled before still does. The example is now a typecheck
+  fixture at `test/readme-example.tsx`, so it cannot rot silently again.
 
 ### Removed
 - `docs/0.3-react-dropin-SPEC.md` — a work order for shipping 0.3, which shipped. It

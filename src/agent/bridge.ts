@@ -50,8 +50,8 @@ export interface AgentDescriptor {
 export interface AgentRegistrar {
   /** Expose a readable, subscribable value under a stable name. */
   expose(name: string, read: Accessor<unknown>, meta?: StateMeta): void;
-  /** Register an agent-callable action. */
-  action(name: string, fn: (...args: unknown[]) => unknown, meta?: ActionMeta): void;
+  /** Register an agent-callable action; `fn` may declare real parameter types. */
+  action<A extends unknown[]>(name: string, fn: (...args: A) => unknown, meta?: ActionMeta): void;
 }
 
 export interface AgentOptions {
@@ -127,7 +127,7 @@ export function createAgentBridge(setup: (r: AgentRegistrar) => void, opts: Agen
       });
     },
     action(name, fn, meta) {
-      actions.set(name, fn);
+      actions.set(name, fn as (...args: unknown[]) => unknown);
       if (meta) actionMeta.set(name, meta);
     },
   };
