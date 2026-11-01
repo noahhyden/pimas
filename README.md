@@ -98,3 +98,15 @@ installPageAgent(model.bridge, { namespace: "model" });
 
 `0.3` removed the HTTP remote bridge. To drive a bridge across a network, POST to your own
 endpoint and call the bridge method there — it was three lines of `fetch` wearing a type.
+
+## License
+
+[Apache License 2.0](LICENSE). Zero runtime dependencies.
+
+The names **pimas** and **pimas-ui**, the name **Noah Hyden**, and the project's
+logos are trademarks and are *not* covered by that licence — see
+[TRADEMARKS.md](TRADEMARKS.md) for what's fine without asking, and
+[NOTICE](NOTICE). Fork the code freely; just give your fork its own name.
+
+Releases published before the move to Apache 2.0 (`pimas-ui` up to `0.3.0`)
+keep the MIT terms they shipped under.
