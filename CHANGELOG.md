@@ -11,7 +11,6 @@ Pre-1.0: minor versions may carry breaking changes.
   names "pimas" / "pimas-ui", the name Noah Hyden, and the project's logos as
   trademarks. Apache 2.0 § 6 grants no rights in them. Nominative use — "works with
   pimas", "a fork of pimas" — stays fine; naming your own product after it does not.
-  Same wording as the sibling `erbina` repo.
 
 ### Removed
 - `docs/0.3-react-dropin-SPEC.md` — a work order for shipping 0.3, which shipped. It

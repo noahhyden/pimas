@@ -75,16 +75,26 @@ Memos must be pure. If a memo writes to the network, speculation will not save y
 
 ## API
 
-| Import | What |
+| Import | Exports |
 | --- | --- |
-| `pimas-ui` | `createSignal` / `createMemo` / `createEffect` / `batch` / `speculate` / `subscribe` / `createRoot` / `catchError` |
-| `pimas-ui/store` | `createStore`, `produce`, `reconcile` |
-| `pimas-ui/agent` | `createModel`, `createAgentBridge` — `snapshot`, `subscribe`, `call`, `explain`, `speculate`, `speculatePlan`, `commitPlan`, `graph` |
-| `pimas-ui/agent/webmcp` | `toWebMCP(bridge)` — actions + `simulate_*` tools |
-| `pimas-ui/agent/page` | `installPageAgent` — `window.__pimas`, with or without WebMCP |
-| `pimas-ui/react` | `usePimas(read)` — React 18+, optional peer |
+| `pimas-ui` | `createSignal` `createMemo` `createEffect` `batch` `untrack` `onCleanup` `createRoot` `subscribe` `catchError` `speculate` `setScheduler` `flushSync` `getListener` `speculationScratch` |
+| `pimas-ui/store` | `createStore` `produce` `reconcile` `unwrap` `onStoreWrite` |
+| `pimas-ui/agent` | `createModel` `createAgentBridge` — the bridge carries `snapshot` `subscribe` `descriptor` `call` `explain` `history` `speculate` `speculatePlan` `commitPlan` `graph` `dispose` |
+| `pimas-ui/agent/webmcp` | `toWebMCP` `detectModelContext` — actions plus `get_*` and `simulate_*` tools |
+| `pimas-ui/agent/page` | `installPageAgent` — sets `window.__pimas`, with or without WebMCP |
+| `pimas-ui/react` | `usePimas` — React 18+, optional peer |
+
+`getListener` and `speculationScratch` are the seam `pimas-ui/store` is built on; you need
+them only to write your own store-like primitive.
 
 Zero runtime dependencies. React is an optional peer, pulled in only if you import `pimas-ui/react`.
+
+### Stability
+
+Pre-1.0, solo-maintained — pin exact versions. Within `0.3.x` the surface above is additive;
+breaking changes bump `0.x.0`. Releases after `0.1.0` carry signed npm provenance. The `0.1.x`
+renderer entries (`pimas-ui/dom`, `/flow`, `/server`, `/resume`, `/hydrate`, `/compiler`,
+`/resource`, `/jsx-runtime`) no longer exist.
 
 A page agent works with or without `document.modelContext`:
 
@@ -96,12 +106,9 @@ installPageAgent(model.bridge, { namespace: "model" });
 // window.__pimas.model.call(action, ...args)       — commit
 ```
 
-`0.3` removed the HTTP remote bridge. To drive a bridge across a network, POST to your own
-endpoint and call the bridge method there — it was three lines of `fetch` wearing a type.
-
 ## License
 
-[Apache License 2.0](LICENSE). Zero runtime dependencies.
+[Apache License 2.0](LICENSE).
 
 The names **pimas** and **pimas-ui**, the name **Noah Hyden**, and the project's
 logos are trademarks and are *not* covered by that licence — see
