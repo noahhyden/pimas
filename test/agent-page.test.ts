@@ -43,7 +43,7 @@ describe("page agent", () => {
     expect(state.n).toBe(1);
     expect(bridge.snapshot().state).toEqual({ n: 1 });
 
-    await installed.call("setN", 8);
+    await installed.bridge.call("setN", 8);
     expect(state.n).toBe(8);
     expect(bridge.snapshot().state).toEqual({ n: 8 });
     bridge.dispose();

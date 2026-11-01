@@ -242,9 +242,9 @@ export function batch<T>(fn: () => T): T {
   }
 }
 
-/** The computation currently tracking, or null outside any effect/memo; an opaque handle, treat it as truthy/falsy. */
-export function getListener(): unknown {
-  return currentObserver;
+/** Whether a computation is currently tracking, i.e. a read here would subscribe. */
+export function isTracking(): boolean {
+  return currentObserver !== null;
 }
 
 /** The current speculation's rollback-scoped scratchpad, or null when not speculating. */

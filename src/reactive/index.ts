@@ -9,7 +9,7 @@ export {
   untrack,
   speculate,
   speculationScratch,
-  getListener,
+  isTracking,
   onCleanup,
   subscribe,
   createRoot,

@@ -11,7 +11,7 @@ const fixtures = {
   "core: + speculate": [`import { createSignal, speculate } from "./src/reactive/index.js"; globalThis.x = [createSignal, speculate];`, 940],
   "store: createStore": [`import { createStore } from "./src/store/index.js"; globalThis.x = createStore;`, 1750],
   "agent: createModel": [`import { createModel } from "./src/agent/index.js"; globalThis.x = createModel;`, 2130],
-  "agent: page": [`import { installPageAgent } from "./src/agent/page.js"; globalThis.x = installPageAgent;`, 1550],
+  "agent: page": [`import { installPageAgent } from "./src/agent/index.js"; globalThis.x = installPageAgent;`, 1550],
   "react: usePimas": [`import { usePimas } from "./src/react/index.js"; globalThis.x = usePimas;`, 710],
 };
 

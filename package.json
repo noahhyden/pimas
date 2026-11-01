@@ -1,6 +1,6 @@
 {
   "name": "pimas-ui",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Exact what-if over a live reactive model. Drop it into React; an agent can simulate against the same graph without committing.",
   "type": "module",
   "license": "Apache-2.0",
