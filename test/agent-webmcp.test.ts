@@ -1,6 +1,5 @@
 /** WebMCP projection tested against a mock host matching the spec. */
 import { describe, it, expect } from "vitest";
-import { createSignal, createMemo } from "../src/reactive/index.js";
 import { createStore } from "../src/store/index.js";
 import { createAgentBridge } from "../src/agent/index.js";
 import {
@@ -96,7 +95,7 @@ describe("toWebMCP — project the bridge onto the WebMCP tool API (issue #13)",
     expect(tools.has("simulate_peek")).toBe(false);
   });
 
-  it("projects simulate_plan (multi-factor) and simulate_sweep (sensitivity)", async () => {
+  it("projects simulate_plan (multi-factor)", async () => {
     const { s, bridge } = build();
     const { host, tools } = mockHost();
     toWebMCP(bridge, { provider: host });
@@ -106,13 +105,6 @@ describe("toWebMCP — project the bridge onto the WebMCP tool API (issue #13)",
       steps: [{ action: "setN", args: [3] }, { action: "setN", args: [8] }],
     });
     expect(planned).toEqual({ n: 8 });
-
-    // sweep: one independent prediction per arg-set
-    const swept = await callTool(tools.get("simulate_sweep")!, {
-      action: "setN",
-      argsList: [[10], [20], [30]],
-    });
-    expect(swept).toEqual([{ n: 10 }, { n: 20 }, { n: 30 }]);
 
     expect(s.n).toBe(1); // every what-if left the real store untouched
   });
@@ -126,28 +118,6 @@ describe("toWebMCP — project the bridge onto the WebMCP tool API (issue #13)",
     const r = (await tools.get("noop")!.execute({})) as { content: Array<{ text: string }> };
     expect(r.content[0]!.text).toBe("null"); // NOT the string "undefined" / not literal undefined
     expect(() => JSON.parse(r.content[0]!.text)).not.toThrow(); // a reference agent can parse it
-  });
-
-  it("simulate_sweep runs each point as an independent top-level speculation (no nesting)", async () => {
-    const [power, setPower] = createSignal(250);
-    const output = createMemo(() => power() * 4);
-    const bridge = createAgentBridge((r) => {
-      r.expose("output", () => output());
-      r.action("setPower", (v) => setPower(v as number));
-    });
-    const { host, tools } = mockHost();
-    toWebMCP(bridge, { provider: host });
-    const sweep = tools.get("simulate_sweep")!;
-
-    expect(await callTool(sweep, { action: "setPower", argsList: [[250], [500], [1000]] })).toEqual([
-      { output: 1000 },
-      { output: 2000 },
-      { output: 4000 },
-    ]);
-    expect(await callTool(sweep, { action: "setPower", argsList: [[1], [2]] })).toEqual([{ output: 4 }, { output: 8 }]);
-    expect(power()).toBe(250);
-    expect(bridge.history()).toEqual([]);
-    bridge.dispose();
   });
 
   it("returns null host under Node and throws without a provider", () => {

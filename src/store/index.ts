@@ -14,14 +14,10 @@ const $KEYS = Symbol("pimas.store.keys");
 type Nodes = Record<PropertyKey, ReturnType<typeof createSignal<number>>>;
 
 // ── L2 provenance (#13): observe committed writes by path ────────────────────
-export interface StoreWriteEvent {
-  /** The path written, e.g. `["rows", 3, "status"]`. */
-  path: PropertyKey[];
-}
-const writeListeners = new Set<(e: StoreWriteEvent) => void>();
+const writeListeners = new Set<(path: PropertyKey[]) => void>();
 
 /** Subscribe to committed store write paths (speculative writes are silent); returns an unsubscribe. */
-export function onStoreWrite(fn: (e: StoreWriteEvent) => void): () => void {
+export function onStoreWrite(fn: (path: PropertyKey[]) => void): () => void {
   writeListeners.add(fn);
   return () => writeListeners.delete(fn);
 }
@@ -328,7 +324,7 @@ export function createStore<T extends object>(init: T): [T, SetStoreFunction<T>]
     // Speculative writes land in the scratch, so the !speculationScratch() guard keeps listeners silent.
     if (writeListeners.size && !speculationScratch() && args.length >= 2) {
       const path = args.slice(0, -1) as PropertyKey[];
-      for (const l of writeListeners) l({ path });
+      for (const l of writeListeners) l(path);
     }
   };
   return [proxy, setStore as SetStoreFunction<T>];

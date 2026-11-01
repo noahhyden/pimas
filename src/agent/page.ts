@@ -17,7 +17,7 @@ export interface PageAgentOptions {
 
 /** Install the browser-agent global whether or not WebMCP exists. */
 export function installPageAgent(bridge: AgentBridge, opts: PageAgentOptions = {}): PageAgent {
-  const tools = toolsForDescriptor(bridge, bridge.descriptor());
+  const tools = toolsForDescriptor(bridge, bridge.descriptor(), opts);
   const pageAgent: PageAgent = {
     bridge,
     tools,
@@ -27,14 +27,10 @@ export function installPageAgent(bridge: AgentBridge, opts: PageAgentOptions = {
   };
 
   const target = globalThis as typeof globalThis & Record<string, unknown>;
-  if (opts.namespace) {
-    const root = (target.__pimas ??= {}) as Record<string, unknown>;
-    root[opts.namespace] = pageAgent;
-  } else {
-    target["__pimas"] = pageAgent;
-  }
+  const root = (target.__pimas ??= {}) as Record<string, unknown>;
+  root[opts.namespace ?? "default"] = pageAgent;
 
-  if (detectModelContext()) toWebMCP(bridge, { namespace: opts.namespace });
+  if (detectModelContext()) toWebMCP(bridge, { namespace: opts.namespace, tools });
 
   return pageAgent;
 }

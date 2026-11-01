@@ -1,19 +1,5 @@
-export {
-  createAgentBridge,
-} from "./bridge.js";
-export type {
-  AgentBridge,
-  AgentRegistrar,
-  AgentOptions,
-  AgentEvent,
-  AgentDescriptor,
-  ActionMeta,
-  StateMeta,
-  CauseRecord,
-  GraphNode,
-  GraphEdge,
-  DependencyGraph,
-} from "./bridge.js";
-
-export { createModel } from "./model.js";
-export type { Model } from "./model.js";
+/** pimas agent surface: the bridge, the one-call model, and the WebMCP / page projections. */
+export * from "./bridge.js";
+export * from "./model.js";
+export * from "./webmcp.js";
+export * from "./page.js";

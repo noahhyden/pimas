@@ -24,15 +24,11 @@ export interface CauseRecord {
 
 /** Optional metadata for an exposed value (feeds the machine-readable descriptor). */
 export interface StateMeta {
-  /** JSON Schema for the value's type. */
-  schema?: object;
   description?: string;
 }
 
 /** Optional metadata for an action (feeds the descriptor + WebMCP tool schema). */
 export interface ActionMeta {
-  /** JSON Schema for the arguments (object form). If omitted, `params` builds one. */
-  input?: object;
   /** Positional parameter names in order, so a named-arg caller can map onto the action signature. */
   params?: string[];
   description?: string;
@@ -54,11 +50,11 @@ export interface AgentRegistrar {
   action<A extends unknown[]>(name: string, fn: (...args: A) => unknown, meta?: ActionMeta): void;
 }
 
+const HISTORY_LIMIT = 50;
+
 export interface AgentOptions {
   /** Source of field-level write labels: forward each write's label to `record`, return an unsubscribe. */
   writeTap?: (record: (label: string) => void) => () => void;
-  /** How many recent causal records `history()` retains. Default 50. */
-  historyLimit?: number;
 }
 
 export interface AgentBridge {
@@ -74,7 +70,7 @@ export interface AgentBridge {
   call(name: string, ...args: unknown[]): unknown;
   /** Causal record of the most recent action, or null before any call. */
   explain(): CauseRecord | null;
-  /** Recent causal records, oldest to newest, bounded by `historyLimit`; `limit` keeps the last N. */
+  /** Recent causal records, oldest to newest, bounded to 50; `limit` keeps the last N. */
   history(limit?: number): CauseRecord[];
   /** Predict the exposed state after `actionName(...args)` without committing. */
   speculate(actionName: string, ...args: unknown[]): Record<string, unknown>;
@@ -95,7 +91,6 @@ export function createAgentBridge(setup: (r: AgentRegistrar) => void, opts: Agen
   const actions = new Map<string, (...args: unknown[]) => unknown>();
   const actionMeta = new Map<string, ActionMeta>();
   const causeLog: CauseRecord[] = [];
-  const historyLimit = opts.historyLimit ?? 50;
   let dispose!: () => void;
 
   const emit = (e: AgentEvent): void => {
@@ -162,7 +157,7 @@ export function createAgentBridge(setup: (r: AgentRegistrar) => void, opts: Agen
         const changed = [...latest.keys()].filter((k) => !Object.is(before.get(k), latest.get(k)));
         const cause = { action, args, writes, changed };
         causeLog.push(cause);
-        if (causeLog.length > historyLimit) causeLog.shift();
+        if (causeLog.length > HISTORY_LIMIT) causeLog.shift();
         emit({ kind: "cause", ...cause });
       },
     };

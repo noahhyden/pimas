@@ -304,8 +304,6 @@ export interface GraphNode {
   id: string;
   /** `signal` = a source with no dependencies; `memo` = a derived value. */
   kind: "signal" | "memo";
-  /** The exposed name this node backs, when a seed read touched it alone. */
-  name?: string;
 }
 /** A directed derives-from edge: `from` is a source of `to` (i.e. `to` reads `from`). */
 export interface GraphEdge {
@@ -342,7 +340,7 @@ export function introspectGraph(seeds: Iterable<readonly [string, () => unknown]
     }
   };
 
-  for (const [name, read] of seeds) {
+  for (const [, read] of seeds) {
     const probe = makeNode<unknown>(undefined, undefined, false);
     const prevObserver = currentObserver;
     const prevOwner = currentOwner;
@@ -358,8 +356,6 @@ export function introspectGraph(seeds: Iterable<readonly [string, () => unknown]
     removeSources(probe); // leave no trace: drop the probe from every source's observers
     for (const r of roots) {
       visit(r);
-      // First name wins (two exposed names may read the same node).
-      if (roots.length === 1 && nodes.get(r)!.name === undefined) nodes.get(r)!.name = name;
     }
   }
 

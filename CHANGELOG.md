@@ -2,9 +2,24 @@
 
 Pre-1.0: minor versions may carry breaking changes.
 
-## [Unreleased]
+## [0.4.0] — 2026-11-01
 
 ### Changed
+- `onStoreWrite` hands the listener the path directly — `(path: PropertyKey[]) => void`,
+  was `(e: { path }) => void`. The `StoreWriteEvent` wrapper is gone; every caller
+  destructured it on the next line anyway.
+- `installPageAgent` always nests under `window.__pimas`. An un-namespaced install used
+  to put the `PageAgent` *at* `__pimas` and a namespaced one put a dict there, so the
+  global's shape depended on an option. It now lands at `__pimas[namespace ?? "default"]`.
+- `installPageAgent` forwards its `namespace` when projecting tools, so the map it exposes
+  as `PageAgent.tools` carries the same prefixed names it registers with WebMCP. It
+  previously built an unprefixed second map and registered a different one.
+- `toWebMCP` takes an optional `opts.tools`, a prebuilt map, so a caller that already
+  projected the descriptor does not project it twice.
+- `prepack` and `build` run `rm -rf dist` first. `tsc` never cleaned its `outDir`, so a
+  local `npm pack` swept up 2,673 lines of the renderer deleted in 0.2.0 — `dist/dom`,
+  `dist/compiler`, `dist/server`, `dist/flow`, `dist/resource`. CI publishes from a
+  clean checkout, so no published tarball ever carried them.
 - README restructured: what → install → quick start → why → agents → API → stability
   → licence. The agent story was spread across three places and is now one section,
   `Stability` was bold inline text inside `## API` and is now its own heading, and the
@@ -24,6 +39,21 @@ Pre-1.0: minor versions may carry breaking changes.
   fixture at `test/readme-example.tsx`, so it cannot rot silently again.
 
 ### Removed
+- `pimas-ui/agent/webmcp` and `pimas-ui/agent/page` subpaths. Both re-export from
+  `pimas-ui/agent` now; `sideEffects: false` and ESM mean a bundler tree-shakes the
+  unused half either way, so the extra entry points bought nothing.
+- The `simulate_sweep` WebMCP tool. It was `argsList.map(args => speculate(action, ...args))`
+  behind thirty lines of JSON Schema. **A sensitivity sweep is N separate
+  `simulate_<action>` calls, one per arg-set** — the `simulate_plan` tool description
+  now says so, so an agent reading the surface finds the replacement without the docs.
+- `StateMeta.schema` and `ActionMeta.input` — two optional JSON Schema fields nothing
+  ever set. `ActionMeta.params` builds the tool schema and is the only path exercised.
+- `AgentOptions.historyLimit` — config no caller set. The bound is a constant, 50.
+- `GraphNode.name`. It was only assigned when a seed read touched exactly one root, so
+  it was absent on most nodes and its "first name wins" tiebreak never fired.
+- Most of `scripts/check-package.mjs`. It asserted four `package.json` literals visible
+  in any diff, and compared `files` by exact `JSON.stringify`, so reordering a key broke
+  the build. The one check a diff can hide — runtime `dependencies` must be empty — stays.
 - `docs/0.3-react-dropin-SPEC.md` — a work order for shipping 0.3, which shipped. It
   described `useSnapshot` as a feature, told the reader not to publish, and pointed at
   a home directory that does not exist on this machine.

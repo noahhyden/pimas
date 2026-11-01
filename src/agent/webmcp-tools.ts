@@ -1,25 +1,22 @@
 import type { AgentBridge, AgentDescriptor } from "./bridge.js";
 import type { WebMCPTool } from "./webmcp.js";
 
-export function envelope(value: unknown): { content: Array<{ type: "text"; text: string }> } {
+function envelope(value: unknown): { content: Array<{ type: "text"; text: string }> } {
   const text = typeof value === "string" ? value : JSON.stringify(value ?? null);
   return { content: [{ type: "text", text }] };
 }
 
-export function schemaFor(action: AgentDescriptor["actions"][string]): object {
-  return (
-    action.input ??
-    (action.params
-      ? {
-          type: "object",
-          properties: Object.fromEntries(action.params.map((parameter) => [parameter, {}])),
-          required: action.params,
-        }
-      : { type: "object", properties: { args: { type: "array", description: "positional arguments" } } })
-  );
+function schemaFor(action: AgentDescriptor["actions"][string]): object {
+  return action.params
+    ? {
+        type: "object",
+        properties: Object.fromEntries(action.params.map((parameter) => [parameter, {}])),
+        required: action.params,
+      }
+    : { type: "object", properties: { args: { type: "array", description: "positional arguments" } } };
 }
 
-export function argvFor(action: AgentDescriptor["actions"][string], input: unknown): unknown[] {
+function argvFor(action: AgentDescriptor["actions"][string], input: unknown): unknown[] {
   const bag = (input ?? {}) as Record<string, unknown>;
   return action.params
     ? action.params.map((parameter) => bag[parameter])
@@ -73,7 +70,7 @@ export function toolsForDescriptor(
   const plan: WebMCPTool = {
     name: `${prefix}simulate_plan`,
     description:
-      "Predict the state after applying several actions in order in ONE shadow (a multi-factor what-if). Commits nothing.",
+      "Predict the state after applying several actions in order in ONE shadow (a multi-factor what-if). Commits nothing. A sensitivity sweep is N separate simulate_<action> calls, one per arg-set.",
     inputSchema: {
       type: "object",
       properties: {
@@ -100,32 +97,6 @@ export function toolsForDescriptor(
     },
   };
   tools.set(plan.name, plan);
-
-  const sweep: WebMCPTool = {
-    name: `${prefix}simulate_sweep`,
-    description:
-      "Run one independent what-if of an action per arg-set (a sensitivity sweep). Returns the predicted state at each point. Commits nothing.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        action: { type: "string", description: "action name to sweep" },
-        argsList: {
-          type: "array",
-          description: "list of positional-argument arrays, one per sweep point",
-          items: { type: "array" },
-        },
-      },
-      required: ["action", "argsList"],
-    },
-    annotations: { readOnlyHint: true },
-    execute: async (input) => {
-      const bag = (input ?? {}) as { action?: string; argsList?: unknown[][] };
-      const action = bag.action as string;
-      const argsList = bag.argsList ?? [];
-      return envelope(argsList.map((args) => bridge.speculate(action, ...args)));
-    },
-  };
-  tools.set(sweep.name, sweep);
 
   return tools;
 }
