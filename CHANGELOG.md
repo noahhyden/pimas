@@ -12,6 +12,13 @@ Pre-1.0: minor versions may carry breaking changes.
   trademarks. Apache 2.0 § 6 grants no rights in them. Nominative use — "works with
   pimas", "a fork of pimas" — stays fine; naming your own product after it does not.
 
+### Fixed
+- `AgentRegistrar.action` accepts a function with real parameter types. It took
+  `(...args: unknown[]) => unknown`, so the README's own example — `(id: string,
+  qty: number) => …` — failed to compile under `strict`. Widening is additive;
+  anything that compiled before still does. The example is now a typecheck
+  fixture at `test/readme-example.tsx`, so it cannot rot silently again.
+
 ### Removed
 - `docs/0.3-react-dropin-SPEC.md` — a work order for shipping 0.3, which shipped. It
   described `useSnapshot` as a feature, told the reader not to publish, and pointed at
